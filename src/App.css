@@ -238,8 +238,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
+  flex-wrap: wrap;
+  gap: 0;
+  padding: 0.75rem 1rem 0;
   background: var(--bg2);
   border-bottom: 1px solid var(--border);
   position: sticky;
@@ -248,19 +249,24 @@ body {
   backdrop-filter: blur(10px);
 }
 
+/* Nav sits on its own full-width second row on mobile */
 .app-nav {
   display: flex;
-  gap: 0.15rem;
-  flex-shrink: 1;
-  min-width: 0;
+  width: 100%;
+  margin: 0.5rem -1rem 0;
+  padding: 0 1rem;
+  border-top: 1px solid var(--border);
+  gap: 0;
 }
 
 .app-nav button {
+  flex: 1;
   background: transparent;
-  border: 1px solid transparent;
+  border: none;
+  border-top: 2px solid transparent;
+  border-radius: 0;
   color: var(--text-dim);
-  padding: 0.45rem 0.6rem;
-  border-radius: var(--radius);
+  padding: 0.55rem 0.25rem;
   font-family: 'DM Mono', monospace;
   font-size: 0.68rem;
   letter-spacing: 0.06em;
@@ -271,13 +277,14 @@ body {
   min-height: 44px;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  text-align: center;
 }
 
-.app-nav button:hover { color: var(--text); border-color: var(--border); }
+.app-nav button:hover { color: var(--text); }
 .app-nav button.nav-active {
   color: var(--gold);
-  border-color: var(--gold-dim);
-  background: var(--gold-dim);
+  border-top-color: var(--gold);
+  background: transparent;
 }
 
 .header-right {
@@ -655,8 +662,9 @@ body {
   .logo-sub { display: block; }
   .user-name { display: block; }
 
-  .app-header { padding: 0.85rem 1.5rem; gap: 1rem; }
-  .app-nav button { font-size: 0.72rem; padding: 0.5rem 0.75rem; }
+  .app-header { padding: 0.85rem 1.5rem 0; gap: 0; }
+  .app-nav { margin: 0.5rem -1.5rem 0; padding: 0 1.5rem; }
+  .app-nav button { font-size: 0.72rem; padding: 0.55rem 0.75rem; }
 
   .app-main { padding: 1.25rem 1.5rem; }
   .picks-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
@@ -673,8 +681,9 @@ body {
 @media (min-width: 1024px) {
   .logo-text { font-size: 1.6rem; }
 
-  .app-header { padding: 1rem 2rem; gap: 1.5rem; }
-  .app-nav button { font-size: 0.78rem; padding: 0.5rem 1rem; letter-spacing: 0.1em; }
+  .app-header { padding: 1rem 2rem 0; gap: 0; }
+  .app-nav { margin: 0.5rem -2rem 0; padding: 0 2rem; }
+  .app-nav button { font-size: 0.78rem; padding: 0.55rem 1rem; letter-spacing: 0.1em; }
 
   .progress-bar-wrap { padding: 0.6rem 2rem; }
   .app-main { padding: 2rem; }
