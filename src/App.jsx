@@ -192,11 +192,11 @@ const CATEGORIES = [
     id: "production_design",
     name: "Production Design",
     nominees: [
-      "Avatar: Fire and Ash",
       "Frankenstein",
       "Hamnet",
+      "Marty Supreme",
+      "One Battle After Another",
       "Sinners",
-      "Wicked: For Good",
     ],
   },
   {
@@ -207,7 +207,7 @@ const CATEGORIES = [
       "Kokuho",
       "Sinners",
       "The Smashing of Atoms",
-      "A Minecraft Movie",
+      "The Ugly Stepsister",
     ],
   },
   {
@@ -220,9 +220,9 @@ const CATEGORIES = [
     name: "Visual Effects",
     nominees: [
       "Avatar: Fire and Ash",
-      "Frankenstein",
-      "Hamnet",
-      "Marty Supreme",
+      "F1",
+      "Jurassic World Rebirth",
+      "The Lost Bus",
       "Sinners",
     ],
   },
