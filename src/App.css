@@ -667,62 +667,95 @@ body {
 }
 
 /* ============================================================
-   PROFILE — Ballot at a glance strip
+   PROFILE — Ballots across all shows
    ============================================================ */
 
-.profile-glance {
+.profile-all-shows {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 0.85rem 1rem;
+  padding: 0.9rem 1rem;
   display: flex;
-  align-items: center;
-  justify-content: space-around;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.profile-section-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.1rem;
+}
+
+.profile-no-shows {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.show-ballot-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  transition: background 0.15s;
+}
+.show-ballot-row.current-show {
+  background: var(--bg3);
+  border-color: var(--border);
+}
+
+.show-ballot-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
   gap: 0.5rem;
 }
 
-.glance-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  flex: 1;
-}
-
-.glance-num {
+.show-ballot-name {
+  font-size: 0.8rem;
+  color: var(--text);
   font-family: 'Playfair Display', serif;
-  font-size: 1.4rem;
-  font-weight: 900;
-  color: var(--white);
-  line-height: 1;
+  font-weight: 700;
 }
 
-.glance-den {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  margin-left: 1px;
-  display: inline;
-}
-
-/* make num+den sit on same baseline */
-.glance-item > :first-child { display: inline; }
-.glance-item > :nth-child(2) { display: inline; }
-
-.glance-label {
-  font-size: 0.6rem;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  text-align: center;
-  margin-top: 4px;
-}
-
-.glance-divider {
-  width: 1px;
-  height: 36px;
-  background: var(--border);
+.show-ballot-pct {
+  font-size: 0.72rem;
+  color: var(--gold);
+  font-weight: 500;
   flex-shrink: 0;
 }
+
+.show-ballot-bar-track {
+  height: 3px;
+  background: var(--bg3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.show-ballot-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold), var(--gold-light));
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+.show-ballot-counts {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.sbc-will { color: var(--gold); }
+.sbc-should { color: var(--crimson); }
+.sbc-both { color: var(--text-dim); }
+.sbc-divider { color: var(--text-muted); opacity: 0.4; }
 
 /* ============================================================
    PROFILE CUSTOMIZATION — Collapsible

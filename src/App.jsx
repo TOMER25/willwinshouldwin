@@ -203,7 +203,7 @@ function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin, allShows }) {
 // ============================================================
 // SHOW APP (picks, community, leaderboard, etc. for one show)
 // ============================================================
-function ShowApp({ show, user, onGoHome }) {
+function ShowApp({ show, user, allShows, onGoHome }) {
   const [picks, setPicks] = useState({});
   const [aggregates, setAggregates] = useState({});
   const [saving, setSaving] = useState(false);
@@ -311,7 +311,7 @@ function ShowApp({ show, user, onGoHome }) {
       {view === "picks" && <PicksView picks={picks} aggregates={aggregates} onPick={handlePick} categories={CATEGORIES} />}
       {view === "community" && <Community currentUserId={user.id} show={show} />}
       {view === "leaderboard" && <Leaderboard currentUserId={user.id} show={show} />}
-      {view === "profile" && <Profile user={user} picks={picks} show={show} />}
+      {view === "profile" && <Profile user={user} picks={picks} show={show} allShows={allShows} />}
       {view === "glossary" && <GlossaryView />}
 
       <footer className="app-footer">{show.name} · willwinshouldwin.com</footer>
@@ -674,8 +674,9 @@ function applyTheme(themeId) {
 // ============================================================
 // PROFILE
 // ============================================================
-function Profile({ user, picks, show }) {
+function Profile({ user, picks, show, allShows = [] }) {
   const [winners, setWinners] = useState({});
+  const [allPicksByShow, setAllPicksByShow] = useState({});
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [profileData, setProfileData] = useState({ accent_color: "gold", favorite_movie: "" });
@@ -685,21 +686,30 @@ function Profile({ user, picks, show }) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "Friend";
 
-  // "Member since" — derived from user creation timestamp
   const memberSince = user.created_at
     ? new Date(user.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })
     : null;
 
   useEffect(() => {
-    loadWinners();
+    loadAll();
     loadProfile();
   }, [show.id]);
 
-  const loadWinners = async () => {
-    const { data } = await supabase.from("winners").select("*").eq("show_id", show.id);
-    const map = {};
-    (data || []).forEach(w => { map[w.category_id] = w.will_win_winner; });
-    setWinners(map);
+  const loadAll = async () => {
+    // Load winners for current show
+    const { data: winData } = await supabase.from("winners").select("*").eq("show_id", show.id);
+    const winMap = {};
+    (winData || []).forEach(w => { winMap[w.category_id] = w.will_win_winner; });
+    setWinners(winMap);
+
+    // Load ALL picks for this user across every show
+    const { data: allPicks } = await supabase.from("picks").select("*").eq("user_id", user.id);
+    const byShow = {};
+    (allPicks || []).forEach(p => {
+      if (!byShow[p.show_id]) byShow[p.show_id] = {};
+      byShow[p.show_id][p.category_id] = p;
+    });
+    setAllPicksByShow(byShow);
     setLoading(false);
   };
 
@@ -725,16 +735,24 @@ function Profile({ user, picks, show }) {
     setSavingProfile(false);
   };
 
+  // Per-show ballot stats
+  const showStats = allShows.map(s => {
+    const showPicks = allPicksByShow[s.id] || {};
+    const total = s.categories.length;
+    const willPicked = s.categories.filter(c => showPicks[c.id]?.will_win).length;
+    const shouldPicked = s.categories.filter(c => showPicks[c.id]?.should_win).length;
+    const bothPicked = s.categories.filter(c => showPicks[c.id]?.will_win && showPicks[c.id]?.should_win).length;
+    return { show: s, total, willPicked, shouldPicked, bothPicked };
+  });
+
+  // Current show accuracy (post-ceremony)
   const categories = show.categories;
   const winnersAnnounced = Object.keys(winners).length > 0;
   const categoriesWithWinners = categories.filter(c => winners[c.id]);
-  const willWinCorrect = categoriesWithWinners.filter(c => picks[c.id]?.will_win === winners[c.id]).length;
-  const shouldWinCorrect = categoriesWithWinners.filter(c => picks[c.id]?.should_win === winners[c.id]).length;
+  const currentPicks = allPicksByShow[show.id] || picks; // fall back to prop picks
+  const willWinCorrect = categoriesWithWinners.filter(c => currentPicks[c.id]?.will_win === winners[c.id]).length;
+  const shouldWinCorrect = categoriesWithWinners.filter(c => currentPicks[c.id]?.should_win === winners[c.id]).length;
   const totalAnswered = categoriesWithWinners.length;
-  const bothPicked = categories.filter(c => picks[c.id]?.will_win && picks[c.id]?.should_win).length;
-  const willPicked = categories.filter(c => picks[c.id]?.will_win).length;
-  const shouldPicked = categories.filter(c => picks[c.id]?.should_win).length;
-  const completionPct = Math.round((bothPicked / categories.length) * 100);
 
   const shareUrl = `${window.location.origin}/?compare=${user.id}`;
   const copyShare = () => { navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); };
@@ -758,25 +776,34 @@ function Profile({ user, picks, show }) {
           </div>
         </div>
 
-        {/* ── Ballot at a glance ── */}
-        <div className="profile-glance">
-          <div className="glance-item">
-            <span className="glance-num">{willPicked}</span>
-            <span className="glance-den">/{categories.length}</span>
-            <span className="glance-label">★ Will Win picks</span>
-          </div>
-          <div className="glance-divider" />
-          <div className="glance-item">
-            <span className="glance-num">{shouldPicked}</span>
-            <span className="glance-den">/{categories.length}</span>
-            <span className="glance-label">♥ Should Win picks</span>
-          </div>
-          <div className="glance-divider" />
-          <div className="glance-item">
-            <span className="glance-num">{bothPicked}</span>
-            <span className="glance-den">/{categories.length}</span>
-            <span className="glance-label">Both filled</span>
-          </div>
+        {/* ── Ballots across all shows ── */}
+        <div className="profile-all-shows">
+          <p className="profile-section-label">My Ballots</p>
+          {showStats.length === 0 && (
+            <p className="profile-no-shows">No shows available yet.</p>
+          )}
+          {showStats.map(({ show: s, total, willPicked, shouldPicked, bothPicked }) => {
+            const pct = total > 0 ? Math.round((bothPicked / total) * 100) : 0;
+            const isCurrentShow = s.id === show.id;
+            return (
+              <div key={s.id} className={`show-ballot-row ${isCurrentShow ? "current-show" : ""}`}>
+                <div className="show-ballot-top">
+                  <span className="show-ballot-name">{s.name}</span>
+                  <span className="show-ballot-pct">{pct}%</span>
+                </div>
+                <div className="show-ballot-bar-track">
+                  <div className="show-ballot-bar-fill" style={{ width: `${pct}%` }} />
+                </div>
+                <div className="show-ballot-counts">
+                  <span className="sbc-will">★ {willPicked}/{total}</span>
+                  <span className="sbc-divider">·</span>
+                  <span className="sbc-should">♥ {shouldPicked}/{total}</span>
+                  <span className="sbc-divider">·</span>
+                  <span className="sbc-both">Both {bothPicked}/{total}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* ── Customization (collapsible) ── */}
@@ -877,7 +904,7 @@ function Profile({ user, picks, show }) {
           <div className="profile-picks-summary">
             <h3 className="profile-section-title">Your Results</h3>
             {categories.filter(c => winners[c.id]).map(cat => {
-              const myW = picks[cat.id]?.will_win, myS = picks[cat.id]?.should_win;
+              const myW = currentPicks[cat.id]?.will_win, myS = currentPicks[cat.id]?.should_win;
               const actual = winners[cat.id];
               return (
                 <div key={cat.id} className="result-row">
@@ -1379,7 +1406,7 @@ export default function App() {
   if (screen === "admin") return <AdminPanel onBack={() => { setScreen("home"); loadAllShows(); }} />;
 
   if (screen === "show" && activeShow) {
-    return <ShowApp show={activeShow} user={user} onGoHome={() => { setScreen("home"); setActiveShow(null); }} />;
+    return <ShowApp show={activeShow} user={user} allShows={allShows} onGoHome={() => { setScreen("home"); setActiveShow(null); }} />;
   }
 
   if (screen === "profile") {
