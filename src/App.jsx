@@ -12,61 +12,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const ADMIN_PASSWORD = "oscars2026admin";
 
 // ============================================================
-// SHOWS CONFIG
-// To add a new show in the future, add a new entry here.
-// Each show needs: id, name, shortName, year, date, status,
-// and a categories array identical in structure to the existing one.
-// ============================================================
-const SHOWS = [
-  {
-    id: "oscars_98",
-    name: "98th Academy Awards",
-    shortName: "Oscars",
-    org: "Academy of Motion Picture Arts and Sciences",
-    year: 2026,
-    date: "March 15, 2026",
-    status: "active", // "upcoming" | "active" | "completed"
-    categories: [
-      { id: "best_picture", name: "Best Picture", nominees: ["Bugonia","F1","Frankenstein","Hamnet","Marty Supreme","One Battle After Another","The Secret Agent","Sentimental Value","Sinners","Train Dreams"] },
-      { id: "best_director", name: "Best Director", nominees: ["Paul Thomas Anderson — One Battle After Another","Ryan Coogler — Sinners","Josh Safdie — Marty Supreme","Joachim Trier — Sentimental Value","Chloé Zhao — Hamnet"] },
-      { id: "best_actor", name: "Best Actor", nominees: ["Timothée Chalamet — Marty Supreme","Leonardo DiCaprio — One Battle After Another","Ethan Hawke — Blue Moon","Michael B. Jordan — Sinners","Wagner Moura — The Secret Agent"] },
-      { id: "best_actress", name: "Best Actress", nominees: ["Jessie Buckley — Hamnet","Rose Byrne — If I Had Legs I'd Kick You","Kate Hudson — Song Sung Blue","Renate Reinsve — Sentimental Value","Emma Stone — Bugonia"] },
-      { id: "best_supporting_actor", name: "Best Supporting Actor", nominees: ["Benicio del Toro — One Battle After Another","Jacob Elordi — Frankenstein","Delroy Lindo — Sinners","Sean Penn — One Battle After Another","Stellan Skarsgård — Sentimental Value"] },
-      { id: "best_supporting_actress", name: "Best Supporting Actress", nominees: ["Elle Fanning — Sentimental Value","Inga Ibsdotter Lilleaas — Sentimental Value","Amy Madigan — Weapons","Wunmi Mosaku — Sinners","Teyana Taylor — One Battle After Another"] },
-      { id: "original_screenplay", name: "Original Screenplay", nominees: ["Blue Moon — Robert Kaplow","It Was Just an Accident — Jafar Panahi et al.","Marty Supreme — Ronald Bronstein & Josh Safdie","Sentimental Value — Eskil Vogt & Joachim Trier","Sinners — Ryan Coogler"] },
-      { id: "adapted_screenplay", name: "Adapted Screenplay", nominees: ["Bugonia — Will Tracy","Frankenstein — Guillermo del Toro","Hamnet — Chloé Zhao & Maggie O'Farrell","One Battle After Another — Paul Thomas Anderson","Train Dreams"] },
-      { id: "cinematography", name: "Cinematography", nominees: ["Frankenstein — Dan Laustsen","Marty Supreme — Darius Khondji","One Battle After Another — Michael Bauman","Sinners — Autumn Durald Arkapaw","Train Dreams — Adolpho Veloso"] },
-      { id: "film_editing", name: "Film Editing", nominees: ["F1 — Stephen Mirrione","Marty Supreme — Ronald Bronstein & Josh Safdie","One Battle After Another — Andy Jurgensen","Sentimental Value — Olivier Bugge Coutté","Sinners — Michael P. Shawver"] },
-      { id: "original_score", name: "Original Score", nominees: ["Bugonia — Jerskin Fendrix","Frankenstein — Alexandre Desplat","Hamnet — Max Richter","One Battle After Another — Jonny Greenwood","Sinners — Ludwig Göransson"] },
-      { id: "original_song", name: "Original Song", nominees: ['"Dear Me" — Diane Warren: Relentless','"Golden" — KPop Demon Hunters','"I Lied To You" — Sinners','"Sweet Dreams Of Joy" — Viva Verdi!','"Train Dreams" — Train Dreams'] },
-      { id: "animated_feature", name: "Animated Feature Film", nominees: ["Arco","Elio","KPop Demon Hunters","Little Amélie or the Character of Rain","Zootopia 2"] },
-      { id: "international_feature", name: "International Feature Film", nominees: ["The Secret Agent (Brazil)","It Was Just an Accident (France)","Sentimental Value (Norway)","Sirāt (Spain)","The Voice of Hind Rajab (Tunisia)"] },
-      { id: "documentary_feature", name: "Documentary Feature", nominees: ["The Alabama Solution","Come See Me in the Good Light","Cutting Through Rocks","Mr. Nobody Against Putin","The Perfect Neighbor"] },
-      { id: "costume_design", name: "Costume Design", nominees: ["Avatar: Fire and Ash — Deborah L. Scott","Frankenstein — Kate Hawley","Hamnet — Malgosia Turzanska","Marty Supreme — Miyako Bellizzi","Sinners — Ruth E. Carter"] },
-      { id: "production_design", name: "Production Design", nominees: ["Frankenstein","Hamnet","Marty Supreme","One Battle After Another","Sinners"] },
-      { id: "makeup_hairstyling", name: "Makeup and Hairstyling", nominees: ["Frankenstein","Kokuho","Sinners","The Smashing of Atoms","The Ugly Stepsister"] },
-      { id: "sound", name: "Sound", nominees: ["F1","Frankenstein","One Battle After Another","Sinners","Sirāt"] },
-      { id: "visual_effects", name: "Visual Effects", nominees: ["Avatar: Fire and Ash","F1","Jurassic World Rebirth","The Lost Bus","Sinners"] },
-      { id: "casting", name: "Casting (New Category!)", nominees: ["Hamnet — Nina Gold","Marty Supreme — Jennifer Venditti","One Battle After Another — Cassandra Kulukundis","The Secret Agent — Gabriel Domingues","Sinners — Francine Maisler"] },
-      { id: "animated_short", name: "Animated Short Film", nominees: ["Butterfly","Forevergreen","The Girl Who Cried Pearls","Retirement Plan","The Three Sisters"] },
-      { id: "live_action_short", name: "Live Action Short Film", nominees: ["Butcher's Stain","A Friend of Dorothy","Jane Austen's Period Drama","The Singers","Two People Exchanging Saliva"] },
-      { id: "documentary_short", name: "Documentary Short Film", nominees: ["All the Empty Rooms","Armed Only With a Camera: The Life and Death of Brent Renaud","Children No More: 'Were and Are Gone'","The Devil Is Busy","Perfectly a Strangeness"] },
-    ],
-  },
-  // ── ADD FUTURE SHOWS HERE ──────────────────────────────────
-  // {
-  //   id: "emmys_76",
-  //   name: "76th Emmy Awards",
-  //   shortName: "Emmys",
-  //   org: "Television Academy",
-  //   year: 2026,
-  //   date: "September 2026",
-  //   status: "upcoming",
-  //   categories: [ ... ],
-  // },
-];
-
-// ============================================================
 // GLOSSARY
 // ============================================================
 const GLOSSARY = [
@@ -694,15 +639,53 @@ function Community({ currentUserId, show }) {
 }
 
 // ============================================================
+// COLOR THEMES
+// ============================================================
+const COLOR_THEMES = [
+  { id: "gold",    label: "Gold",    will: "#c9a84c", should: "#c94c5e", desc: "Classic" },
+  { id: "teal",    label: "Teal",    will: "#3cbfb0", should: "#bf6b3c", desc: "Ocean" },
+  { id: "violet",  label: "Violet",  will: "#9b6fd4", should: "#d46f6f", desc: "Dusk" },
+  { id: "silver",  label: "Silver",  will: "#a0a8c0", should: "#c07070", desc: "Noir" },
+  { id: "emerald", label: "Emerald", will: "#4caf7d", should: "#af4c7d", desc: "Garden" },
+  { id: "amber",   label: "Amber",   will: "#e8a030", should: "#3090e8", desc: "Sunrise" },
+];
+
+function applyTheme(themeId) {
+  const theme = COLOR_THEMES.find(t => t.id === themeId) || COLOR_THEMES[0];
+  const root = document.documentElement;
+
+  // Parse hex to rgb components for rgba() usage
+  const hexToRgb = hex => {
+    const r = parseInt(hex.slice(1,3),16);
+    const g = parseInt(hex.slice(3,5),16);
+    const b = parseInt(hex.slice(5,7),16);
+    return `${r}, ${g}, ${b}`;
+  };
+
+  root.style.setProperty('--gold',        theme.will);
+  root.style.setProperty('--gold-light',  theme.will + 'cc');
+  root.style.setProperty('--gold-dim',    `rgba(${hexToRgb(theme.will)}, 0.15)`);
+  root.style.setProperty('--crimson',     theme.should);
+  root.style.setProperty('--crimson-dim', `rgba(${hexToRgb(theme.should)}, 0.15)`);
+}
+
+// ============================================================
 // PROFILE
 // ============================================================
 function Profile({ user, picks, show }) {
   const [winners, setWinners] = useState({});
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [profileData, setProfileData] = useState({ accent_color: "gold", favorite_movie: "" });
+  const [editingMovie, setEditingMovie] = useState(false);
+  const [movieDraft, setMovieDraft] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
   const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "Friend";
 
-  useEffect(() => { loadWinners(); }, [show.id]);
+  useEffect(() => {
+    loadWinners();
+    loadProfile();
+  }, [show.id]);
 
   const loadWinners = async () => {
     const { data } = await supabase.from("winners").select("*").eq("show_id", show.id);
@@ -710,6 +693,28 @@ function Profile({ user, picks, show }) {
     (data || []).forEach(w => { map[w.category_id] = w.will_win_winner; });
     setWinners(map);
     setLoading(false);
+  };
+
+  const loadProfile = async () => {
+    const { data } = await supabase.from("profiles").select("accent_color, favorite_movie").eq("id", user.id).single();
+    if (data) {
+      setProfileData(data);
+      applyTheme(data.accent_color || "gold");
+    }
+  };
+
+  const handleThemeChange = async (themeId) => {
+    setProfileData(prev => ({ ...prev, accent_color: themeId }));
+    applyTheme(themeId);
+    await supabase.from("profiles").update({ accent_color: themeId }).eq("id", user.id);
+  };
+
+  const saveMovie = async () => {
+    setSavingProfile(true);
+    await supabase.from("profiles").update({ favorite_movie: movieDraft.trim() }).eq("id", user.id);
+    setProfileData(prev => ({ ...prev, favorite_movie: movieDraft.trim() }));
+    setEditingMovie(false);
+    setSavingProfile(false);
   };
 
   const categories = show.categories;
@@ -726,17 +731,81 @@ function Profile({ user, picks, show }) {
 
   if (loading) return <div className="app-main"><div className="loading">Loading…</div></div>;
 
+  const currentTheme = COLOR_THEMES.find(t => t.id === profileData.accent_color) || COLOR_THEMES[0];
+
   return (
     <div className="app-main">
       <div className="profile-wrap">
+
+        {/* Identity card */}
         <div className="profile-card">
           <div className="profile-avatar">{displayName[0].toUpperCase()}</div>
           <div className="profile-info">
             <h2 className="profile-name">{displayName}</h2>
             <p className="profile-email">{user.email}</p>
-            <p className="profile-year">{show.name}</p>
+            {profileData.favorite_movie && (
+              <p className="profile-fav-movie">❤ {profileData.favorite_movie}</p>
+            )}
           </div>
         </div>
+
+        {/* Customization */}
+        <div className="profile-customization">
+          <h3 className="profile-section-title">Customize</h3>
+
+          {/* Color theme */}
+          <div className="theme-section">
+            <p className="theme-label">Color theme</p>
+            <div className="theme-swatches">
+              {COLOR_THEMES.map(theme => (
+                <button
+                  key={theme.id}
+                  className={`theme-swatch ${profileData.accent_color === theme.id ? "selected" : ""}`}
+                  onClick={() => handleThemeChange(theme.id)}
+                  title={`${theme.label} — ${theme.desc}`}
+                >
+                  <span className="swatch-will" style={{ background: theme.will }} />
+                  <span className="swatch-should" style={{ background: theme.should }} />
+                  <span className="swatch-label">{theme.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Favorite movie */}
+          <div className="fav-movie-section">
+            <p className="theme-label">Favorite movie</p>
+            {editingMovie ? (
+              <div className="fav-movie-edit">
+                <input
+                  className="auth-input fav-movie-input"
+                  placeholder="e.g. Mulholland Drive"
+                  value={movieDraft}
+                  onChange={e => setMovieDraft(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && saveMovie()}
+                  autoFocus
+                />
+                <div className="fav-movie-actions">
+                  <button className="copy-link-btn" onClick={saveMovie} disabled={savingProfile}>
+                    {savingProfile ? "Saving…" : "Save"}
+                  </button>
+                  <button className="back-btn" onClick={() => setEditingMovie(false)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div className="fav-movie-display">
+                <span className="fav-movie-value">
+                  {profileData.favorite_movie || <em className="fav-movie-empty">Not set</em>}
+                </span>
+                <button className="fav-movie-edit-btn" onClick={() => { setMovieDraft(profileData.favorite_movie || ""); setEditingMovie(true); }}>
+                  {profileData.favorite_movie ? "Change" : "Add"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Stats */}
         <div className="profile-stats">
           <div className="stat-box">
             <span className="stat-num">{bothPicked}/{categories.length}</span>
@@ -761,6 +830,8 @@ function Profile({ user, picks, show }) {
             </div>
           )}
         </div>
+
+        {/* Share */}
         <div className="profile-share">
           <p className="profile-share-label">Share your ballot with friends</p>
           <div className="compare-link-box">
@@ -768,6 +839,8 @@ function Profile({ user, picks, show }) {
             <button className="copy-link-btn" onClick={copyShare}>{copied ? "Copied!" : "Copy"}</button>
           </div>
         </div>
+
+        {/* Results after ceremony */}
         {winnersAnnounced && (
           <div className="profile-picks-summary">
             <h3 className="profile-section-title">Your Results</h3>
@@ -799,7 +872,7 @@ function GlossaryView() {
   return (
     <div className="app-main">
       <h2 className="section-title">Guide & Glossary</h2>
-      <p className="glossary-intro">Everything you need to understand the ballot — from how Will Win and Should Win work, to what every category means.</p>
+      <p className="glossary-intro">Everything you need to understand the ballot — from how Will Win and Should Win works, to what every category means.</p>
       {GLOSSARY.map(section => (
         <div key={section.section} className="glossary-section">
           <h3 className="glossary-section-title">{section.section}</h3>
@@ -1004,7 +1077,7 @@ function ManageShows({ dbShows, onRefresh }) {
     onRefresh();
   };
 
-  if (dbShows.length === 0) return <p className="leaderboard-note">No database shows yet. Use "Add Show" to create one.</p>;
+  if (dbShows.length === 0) return <p className="leaderboard-note">No shows found. Use "Add Show" to create one.</p>;
 
   return (
     <div className="manage-shows-list">
@@ -1061,15 +1134,11 @@ function AdminPanel({ onBack }) {
         id: s.id, name: s.name, shortName: s.short_name, org: s.org,
         year: s.year, date: s.date, status: s.status,
         categories: (cats || []).map(c => ({ id: c.id, name: c.name, nominees: c.nominees })),
-        fromDb: true,
       };
     }));
     setDbShows(shows);
-    const combined = [...SHOWS, ...shows];
-    setAllShows(combined);
-    const first = combined[0];
-    setSelectedShow(first);
-    loadWinners(first.id);
+    setAllShows(shows);
+    if (shows.length > 0) { setSelectedShow(shows[0]); loadWinners(shows[0].id); }
   };
 
   const loadWinners = async (showId) => {
@@ -1183,7 +1252,7 @@ function AdminPanel({ onBack }) {
         {adminTab === "manage" && (
           <div className="admin-section">
             <h3 className="admin-section-title">Manage Shows</h3>
-            <p className="admin-hint">Update the status of shows added via the admin panel. Code-defined shows (like the Oscars) are managed in App.jsx.</p>
+            <p className="admin-hint">Update the status of any show. Changes appear on the home screen immediately.</p>
             <ManageShows dbShows={dbShows} onRefresh={loadDbShows} />
           </div>
         )}
@@ -1198,7 +1267,7 @@ function AdminPanel({ onBack }) {
 // ============================================================
 // STANDALONE PROFILE PAGE (for /profile and ?compare= links)
 // ============================================================
-function StandaloneProfile({ user, onBack }) {
+function StandaloneProfile({ user, onBack, allShows }) {
   return (
     <div className="app">
       <header className="app-header">
@@ -1214,7 +1283,7 @@ function StandaloneProfile({ user, onBack }) {
       </header>
       <div className="app-main">
         <h2 className="section-title">My Profile</h2>
-        {SHOWS.map(show => (
+        {allShows.map(show => (
           <div key={show.id} style={{ marginBottom: "2rem" }}>
             <h3 style={{ fontFamily: "Playfair Display, serif", color: "var(--gold-light)", marginBottom: "1rem" }}>{show.name}</h3>
             <Profile user={user} picks={{}} show={show} />
@@ -1234,23 +1303,30 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState("home");
   const [activeShow, setActiveShow] = useState(null);
-  const [dbShows, setDbShows] = useState([]);
+  const [allShows, setAllShows] = useState([]);
   const [showsLoading, setShowsLoading] = useState(true);
 
   useEffect(() => {
     document.title = "WillWin / ShouldWin";
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      if (session?.user) loadUserTheme(session.user.id);
       setLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
       setUser(session?.user ?? null);
+      if (session?.user) loadUserTheme(session.user.id);
     });
-    loadDbShows();
+    loadAllShows();
     return () => subscription.unsubscribe();
   }, []);
 
-  const loadDbShows = async () => {
+  const loadUserTheme = async (userId) => {
+    const { data } = await supabase.from("profiles").select("accent_color").eq("id", userId).single();
+    if (data?.accent_color) applyTheme(data.accent_color);
+  };
+
+  const loadAllShows = async () => {
     setShowsLoading(true);
     const { data } = await supabase.from("db_shows").select("*").order("year", { ascending: false });
     const shows = await Promise.all((data || []).map(async s => {
@@ -1259,26 +1335,23 @@ export default function App() {
         id: s.id, name: s.name, shortName: s.short_name, org: s.org,
         year: s.year, date: s.date, status: s.status,
         categories: (cats || []).map(c => ({ id: c.id, name: c.name, nominees: c.nominees })),
-        fromDb: true,
       };
     }));
-    setDbShows(shows);
+    setAllShows(shows);
     setShowsLoading(false);
   };
-
-  const allShows = [...SHOWS, ...dbShows];
 
   if (loading || showsLoading) return <div className="loading-screen"><div className="loading-inner">Loading…</div></div>;
   if (!user) return <AuthModal onAuth={setUser} />;
 
-  if (screen === "admin") return <AdminPanel onBack={() => { setScreen("home"); loadDbShows(); }} />;
+  if (screen === "admin") return <AdminPanel onBack={() => { setScreen("home"); loadAllShows(); }} />;
 
   if (screen === "show" && activeShow) {
     return <ShowApp show={activeShow} user={user} onGoHome={() => { setScreen("home"); setActiveShow(null); }} />;
   }
 
   if (screen === "profile") {
-    return <StandaloneProfile user={user} onBack={() => setScreen("home")} />;
+    return <StandaloneProfile user={user} onBack={() => setScreen("home")} allShows={allShows} />;
   }
 
   return (
