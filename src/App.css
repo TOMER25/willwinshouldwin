@@ -535,3 +535,114 @@ body {
   .app-nav button { font-size: 0.6rem; padding: 0.55rem 0.3rem; }
   .signout-btn { font-size: 0.6rem; padding: 0.3rem 0.5rem; }
 }
+
+/* ============================================================
+   ADD SHOW FORM
+   ============================================================ */
+
+.add-show-form { max-width: 720px; }
+
+.add-show-fields {
+  display: flex; flex-direction: column; gap: 0.85rem;
+  margin-bottom: 1.75rem;
+  padding-bottom: 1.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.add-show-field { display: flex; flex-direction: column; gap: 0.35rem; }
+.add-show-field .auth-input,
+.add-show-field .admin-select { margin: 0; }
+
+.add-show-field-row {
+  display: flex; flex-direction: column; gap: 0.85rem;
+}
+
+.add-show-cats-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 0.85rem;
+}
+
+.add-cat-btn {
+  background: var(--gold-dim); border: 1px solid var(--gold);
+  color: var(--gold); padding: 0.4rem 0.85rem;
+  border-radius: 20px; font-family: 'DM Mono', monospace;
+  font-size: 0.72rem; letter-spacing: 0.08em;
+  cursor: pointer; transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.add-cat-btn:hover { background: var(--gold); color: #0a0c14; }
+
+.add-show-cats { display: flex; flex-direction: column; gap: 1rem; }
+
+.add-cat-block {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 1rem;
+}
+
+.add-cat-header {
+  display: flex; gap: 0.5rem; align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.add-cat-name-input { flex: 1; }
+
+.add-nominees-list { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.add-nominee-row { display: flex; gap: 0.5rem; align-items: center; }
+.add-nominee-input { flex: 1; padding: 0.6rem 0.85rem; font-size: 0.9rem; }
+
+.remove-btn {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-muted); width: 32px; height: 32px;
+  border-radius: 6px; font-size: 0.75rem;
+  cursor: pointer; transition: all 0.2s; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.remove-btn:hover { border-color: var(--crimson); color: var(--crimson); background: var(--crimson-dim); }
+.remove-btn-sm { width: 28px; height: 28px; font-size: 0.68rem; }
+
+.add-nominee-btn {
+  background: transparent; border: 1px dashed var(--border);
+  color: var(--text-muted); padding: 0.4rem 0.75rem;
+  border-radius: 6px; font-family: 'DM Mono', monospace;
+  font-size: 0.68rem; letter-spacing: 0.06em;
+  cursor: pointer; transition: all 0.2s; text-align: left;
+  margin-top: 0.1rem;
+  -webkit-tap-highlight-color: transparent;
+}
+.add-nominee-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+.admin-success {
+  display: flex; flex-direction: column; gap: 1rem;
+  padding: 2rem; background: rgba(90,160,120,0.1);
+  border: 1px solid rgba(90,160,120,0.3);
+  border-radius: 10px; max-width: 400px;
+  color: #5da; font-size: 0.9rem;
+}
+
+/* ============================================================
+   MANAGE SHOWS
+   ============================================================ */
+
+.manage-shows-list { display: flex; flex-direction: column; gap: 0.5rem; max-width: 600px; }
+
+.manage-show-row {
+  display: flex; align-items: center; gap: 1rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.75rem 1rem;
+  flex-wrap: wrap;
+}
+
+.manage-show-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.manage-show-name { font-size: 0.85rem; color: var(--text); }
+.manage-show-date { font-size: 0.68rem; color: var(--text-muted); }
+.manage-show-select { width: auto; flex-shrink: 0; }
+
+/* ============================================================
+   RESPONSIVE — add show form tablet+
+   ============================================================ */
+@media (min-width: 600px) {
+  .add-show-field-row { flex-direction: row; gap: 1rem; }
+  .add-show-field-row .add-show-field { flex: 1; }
+}

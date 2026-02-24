@@ -197,9 +197,7 @@ function AuthModal({ onAuth }) {
 // ============================================================
 // HOME SCREEN
 // ============================================================
-function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin }) {
-  const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "Friend";
-
+function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin, allShows }) {
   return (
     <div className="home-screen">
       <div className="home-header">
@@ -220,33 +218,34 @@ function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin }) {
         <div className="shows-section">
           <h2 className="shows-heading">Award Shows</h2>
           <div className="shows-grid">
-            {SHOWS.map(show => {
+            {allShows.map(show => {
               const badge = statusLabel(show.status);
+              const isUpcoming = show.status === "upcoming";
               return (
                 <button
                   key={show.id}
-                  className={`show-card ${show.status === "upcoming" ? "show-card-upcoming" : ""}`}
-                  onClick={() => show.status !== "upcoming" && onSelectShow(show)}
-                  disabled={show.status === "upcoming"}
+                  className={`show-card ${isUpcoming ? "show-card-upcoming" : ""}`}
+                  onClick={() => !isUpcoming && onSelectShow(show)}
+                  disabled={isUpcoming}
                 >
                   <div className="show-card-top">
                     <span className={`show-badge ${badge.cls}`}>{badge.text}</span>
                   </div>
                   <h3 className="show-name">{show.name}</h3>
-                  <p className="show-org">{show.org}</p>
-                  <p className="show-date">{show.date}</p>
+                  {show.org && <p className="show-org">{show.org}</p>}
+                  {show.date && <p className="show-date">{show.date}</p>}
                   <p className="show-cats">{show.categories.length} categories</p>
-                  {show.status !== "upcoming" && (
-                    <div className="show-cta">Make your picks →</div>
-                  )}
+                  {!isUpcoming && <div className="show-cta">Make your picks →</div>}
                 </button>
               );
             })}
 
-            {/* Placeholder for future shows */}
-            <div className="show-card show-card-placeholder">
-              <p className="placeholder-text">More shows coming soon</p>
-            </div>
+            {/* Placeholder — only show if no upcoming shows already exist */}
+            {!allShows.some(s => s.status === "upcoming") && (
+              <div className="show-card show-card-placeholder">
+                <p className="placeholder-text">More shows coming soon</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -825,18 +824,252 @@ function GlossaryView() {
 // ============================================================
 // ADMIN PANEL
 // ============================================================
+
+// ---- helpers ----
+function slugify(str) {
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
+function newCategory() {
+  return { _id: Math.random().toString(36).slice(2), name: "", nominees: [""] };
+}
+
+// ---- Add Show Form ----
+function AddShowForm({ onSaved, allShows }) {
+  const [form, setForm] = useState({
+    name: "", shortName: "", org: "", year: new Date().getFullYear() + 1,
+    date: "", status: "upcoming",
+  });
+  const [categories, setCategories] = useState([newCategory()]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  // Category helpers
+  const addCategory = () => setCategories(cs => [...cs, newCategory()]);
+  const removeCategory = (id) => setCategories(cs => cs.filter(c => c._id !== id));
+  const setCatName = (id, val) => setCategories(cs => cs.map(c => c._id === id ? { ...c, name: val } : c));
+  const addNominee = (id) => setCategories(cs => cs.map(c => c._id === id ? { ...c, nominees: [...c.nominees, ""] } : c));
+  const removeNominee = (id, idx) => setCategories(cs => cs.map(c => c._id === id ? { ...c, nominees: c.nominees.filter((_, i) => i !== idx) } : c));
+  const setNominee = (id, idx, val) => setCategories(cs => cs.map(c => c._id === id ? { ...c, nominees: c.nominees.map((n, i) => i === idx ? val : n) } : c));
+
+  const handleSave = async () => {
+    setError("");
+    if (!form.name.trim()) return setError("Show name is required.");
+    if (!form.shortName.trim()) return setError("Short name is required.");
+    const filledCats = categories.filter(c => c.name.trim() && c.nominees.some(n => n.trim()));
+    if (filledCats.length === 0) return setError("Add at least one category with at least one nominee.");
+
+    const showId = slugify(form.name) + "_" + form.year;
+    // Check for duplicate id
+    if (allShows.some(s => s.id === showId)) return setError(`A show with id "${showId}" already exists.`);
+
+    setSaving(true);
+    // Save show
+    const { error: showErr } = await supabase.from("db_shows").insert({
+      id: showId,
+      name: form.name.trim(),
+      short_name: form.shortName.trim(),
+      org: form.org.trim(),
+      year: parseInt(form.year),
+      date: form.date.trim(),
+      status: form.status,
+    });
+    if (showErr) { setSaving(false); return setError(showErr.message); }
+
+    // Save categories
+    const catRows = filledCats.map((c, order) => ({
+      show_id: showId,
+      id: slugify(c.name),
+      name: c.name.trim(),
+      nominees: c.nominees.filter(n => n.trim()),
+      sort_order: order,
+    }));
+    const { error: catErr } = await supabase.from("db_show_categories").insert(catRows);
+    if (catErr) { setSaving(false); return setError(catErr.message); }
+
+    setSaving(false);
+    setSuccess(true);
+    onSaved();
+  };
+
+  if (success) return (
+    <div className="admin-success">
+      <p>✓ Show saved successfully!</p>
+      <button className="back-btn" onClick={() => setSuccess(false)}>Add another show</button>
+    </div>
+  );
+
+  return (
+    <div className="add-show-form">
+      <h3 className="admin-section-title">Add a New Show</h3>
+      <p className="admin-hint">Fill in the show details and build out the categories. Only categories with at least one nominee will be saved.</p>
+
+      {error && <div className="auth-error" style={{ marginBottom: "1rem" }}>{error}</div>}
+
+      {/* Show details */}
+      <div className="add-show-fields">
+        <div className="add-show-field">
+          <label className="admin-cat-label">Show Name *</label>
+          <input className="auth-input" placeholder="e.g. 76th Emmy Awards" value={form.name} onChange={e => setField("name", e.target.value)} />
+        </div>
+        <div className="add-show-field">
+          <label className="admin-cat-label">Short Name *</label>
+          <input className="auth-input" placeholder="e.g. Emmys" value={form.shortName} onChange={e => setField("shortName", e.target.value)} />
+        </div>
+        <div className="add-show-field">
+          <label className="admin-cat-label">Organization</label>
+          <input className="auth-input" placeholder="e.g. Television Academy" value={form.org} onChange={e => setField("org", e.target.value)} />
+        </div>
+        <div className="add-show-field-row">
+          <div className="add-show-field">
+            <label className="admin-cat-label">Year *</label>
+            <input className="auth-input" type="number" value={form.year} onChange={e => setField("year", e.target.value)} />
+          </div>
+          <div className="add-show-field">
+            <label className="admin-cat-label">Ceremony Date</label>
+            <input className="auth-input" placeholder="e.g. September 21, 2026" value={form.date} onChange={e => setField("date", e.target.value)} />
+          </div>
+          <div className="add-show-field">
+            <label className="admin-cat-label">Status</label>
+            <select className="admin-select" value={form.status} onChange={e => setField("status", e.target.value)}>
+              <option value="upcoming">Upcoming</option>
+              <option value="active">Active (open for picks)</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Categories */}
+      <div className="add-show-cats-header">
+        <h4 className="admin-section-title" style={{ fontSize: "0.95rem" }}>Categories</h4>
+        <button className="add-cat-btn" onClick={addCategory}>+ Add Category</button>
+      </div>
+
+      <div className="add-show-cats">
+        {categories.map((cat, ci) => (
+          <div key={cat._id} className="add-cat-block">
+            <div className="add-cat-header">
+              <input
+                className="auth-input add-cat-name-input"
+                placeholder={`Category ${ci + 1} name, e.g. Best Picture`}
+                value={cat.name}
+                onChange={e => setCatName(cat._id, e.target.value)}
+              />
+              <button className="remove-btn" onClick={() => removeCategory(cat._id)} title="Remove category">✕</button>
+            </div>
+            <div className="add-nominees-list">
+              {cat.nominees.map((nom, ni) => (
+                <div key={ni} className="add-nominee-row">
+                  <input
+                    className="auth-input add-nominee-input"
+                    placeholder={`Nominee ${ni + 1}`}
+                    value={nom}
+                    onChange={e => setNominee(cat._id, ni, e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") { e.preventDefault(); addNominee(cat._id); }
+                    }}
+                  />
+                  {cat.nominees.length > 1 && (
+                    <button className="remove-btn remove-btn-sm" onClick={() => removeNominee(cat._id, ni)} title="Remove nominee">✕</button>
+                  )}
+                </div>
+              ))}
+              <button className="add-nominee-btn" onClick={() => addNominee(cat._id)}>+ Add Nominee</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: "1.5rem" }}>
+        <button className="auth-submit admin-save-btn" style={{ width: "auto", minWidth: "180px" }} onClick={handleSave} disabled={saving}>
+          {saving ? "Saving…" : "Save Show"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---- Manage Shows (edit status of DB shows) ----
+function ManageShows({ dbShows, onRefresh }) {
+  const [saving, setSaving] = useState(null);
+
+  const updateStatus = async (showId, status) => {
+    setSaving(showId);
+    await supabase.from("db_shows").update({ status }).eq("id", showId);
+    setSaving(null);
+    onRefresh();
+  };
+
+  if (dbShows.length === 0) return <p className="leaderboard-note">No database shows yet. Use "Add Show" to create one.</p>;
+
+  return (
+    <div className="manage-shows-list">
+      {dbShows.map(show => (
+        <div key={show.id} className="manage-show-row">
+          <div className="manage-show-info">
+            <span className="manage-show-name">{show.name}</span>
+            <span className="manage-show-date">{show.date}</span>
+          </div>
+          <select
+            className="admin-select manage-show-select"
+            value={show.status}
+            onChange={e => updateStatus(show.id, e.target.value)}
+            disabled={saving === show.id}
+          >
+            <option value="upcoming">Upcoming</option>
+            <option value="active">Active</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---- Main Admin Panel ----
 function AdminPanel({ onBack }) {
   const [authed, setAuthed] = useState(false);
   const [pw, setPw] = useState("");
   const [pwError, setPwError] = useState(false);
-  const [selectedShow, setSelectedShow] = useState(SHOWS[0]);
+  const [adminTab, setAdminTab] = useState("winners"); // "winners" | "add" | "manage"
+  const [selectedShow, setSelectedShow] = useState(null);
+  const [allShows, setAllShows] = useState([]);
+  const [dbShows, setDbShows] = useState([]);
   const [winners, setWinners] = useState({});
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
 
   const login = () => {
-    if (pw === ADMIN_PASSWORD) { setAuthed(true); loadWinners(SHOWS[0].id); }
-    else { setPwError(true); setTimeout(() => setPwError(false), 2000); }
+    if (pw === ADMIN_PASSWORD) {
+      setAuthed(true);
+      loadDbShows();
+    } else {
+      setPwError(true);
+      setTimeout(() => setPwError(false), 2000);
+    }
+  };
+
+  const loadDbShows = async () => {
+    const { data } = await supabase.from("db_shows").select("*").order("year", { ascending: false });
+    const shows = await Promise.all((data || []).map(async s => {
+      const { data: cats } = await supabase.from("db_show_categories").select("*").eq("show_id", s.id).order("sort_order");
+      return {
+        id: s.id, name: s.name, shortName: s.short_name, org: s.org,
+        year: s.year, date: s.date, status: s.status,
+        categories: (cats || []).map(c => ({ id: c.id, name: c.name, nominees: c.nominees })),
+        fromDb: true,
+      };
+    }));
+    setDbShows(shows);
+    const combined = [...SHOWS, ...shows];
+    setAllShows(combined);
+    const first = combined[0];
+    setSelectedShow(first);
+    loadWinners(first.id);
   };
 
   const loadWinners = async (showId) => {
@@ -894,52 +1127,67 @@ function AdminPanel({ onBack }) {
             <span className="show-context-badge">Admin</span>
           </div>
         </div>
+        <nav className="app-nav">
+          {[["winners","Enter Winners"],["add","Add Show"],["manage","Manage Shows"]].map(([id, label]) => (
+            <button key={id} className={adminTab === id ? "nav-active" : ""} onClick={() => setAdminTab(id)}>{label}</button>
+          ))}
+        </nav>
       </header>
 
       <div className="app-main">
-        <h2 className="section-title">Admin Panel</h2>
 
-        {/* Show selector */}
-        <div className="admin-show-tabs">
-          {SHOWS.map(show => (
-            <button key={show.id}
-              className={selectedShow.id === show.id ? "active" : ""}
-              onClick={() => handleShowChange(show)}>
-              {show.shortName} {show.year}
-            </button>
-          ))}
-        </div>
-
-        <div className="admin-section">
-          <div className="admin-section-header">
-            <h3 className="admin-section-title">Enter Winners — {selectedShow.name}</h3>
-            <div className="admin-save-row">
-              {saveMsg && <span className="save-indicator saved">{saveMsg}</span>}
-              <button className="auth-submit admin-save-btn" onClick={saveAll} disabled={saving}>
-                {saving ? "Saving…" : "Save All Winners"}
-              </button>
+        {/* ENTER WINNERS TAB */}
+        {adminTab === "winners" && selectedShow && (
+          <>
+            <div className="admin-show-tabs">
+              {allShows.map(show => (
+                <button key={show.id}
+                  className={selectedShow.id === show.id ? "active" : ""}
+                  onClick={() => handleShowChange(show)}>
+                  {show.shortName} {show.year}
+                </button>
+              ))}
             </div>
-          </div>
-          <p className="admin-hint">Select the winner from the dropdown for each category. Click "Save All Winners" when done. The leaderboard updates immediately.</p>
-
-          <div className="admin-winners-grid">
-            {selectedShow.categories.map(cat => (
-              <div key={cat.id} className="admin-winner-row">
-                <label className="admin-cat-label">{cat.name}</label>
-                <select
-                  className="admin-select"
-                  value={winners[cat.id] || ""}
-                  onChange={e => handleWinnerChange(cat.id, e.target.value)}
-                >
-                  <option value="">— Not yet announced —</option>
-                  {cat.nominees.map(nom => (
-                    <option key={nom} value={nom}>{nom}</option>
-                  ))}
-                </select>
+            <div className="admin-section">
+              <div className="admin-section-header">
+                <h3 className="admin-section-title">Enter Winners — {selectedShow.name}</h3>
+                <div className="admin-save-row">
+                  {saveMsg && <span className="save-indicator saved">{saveMsg}</span>}
+                  <button className="auth-submit admin-save-btn" onClick={saveAll} disabled={saving}>
+                    {saving ? "Saving…" : "Save All Winners"}
+                  </button>
+                </div>
               </div>
-            ))}
+              <p className="admin-hint">Select the winner from the dropdown for each category. Click "Save All Winners" when done.</p>
+              <div className="admin-winners-grid">
+                {selectedShow.categories.map(cat => (
+                  <div key={cat.id} className="admin-winner-row">
+                    <label className="admin-cat-label">{cat.name}</label>
+                    <select className="admin-select" value={winners[cat.id] || ""} onChange={e => handleWinnerChange(cat.id, e.target.value)}>
+                      <option value="">— Not yet announced —</option>
+                      {cat.nominees.map(nom => <option key={nom} value={nom}>{nom}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ADD SHOW TAB */}
+        {adminTab === "add" && (
+          <AddShowForm allShows={allShows} onSaved={() => { loadDbShows(); setAdminTab("manage"); }} />
+        )}
+
+        {/* MANAGE SHOWS TAB */}
+        {adminTab === "manage" && (
+          <div className="admin-section">
+            <h3 className="admin-section-title">Manage Shows</h3>
+            <p className="admin-hint">Update the status of shows added via the admin panel. Code-defined shows (like the Oscars) are managed in App.jsx.</p>
+            <ManageShows dbShows={dbShows} onRefresh={loadDbShows} />
           </div>
-        </div>
+        )}
+
       </div>
 
       <footer className="app-footer">WillWin/ShouldWin Admin · willwinshouldwin.com</footer>
@@ -984,8 +1232,10 @@ function StandaloneProfile({ user, onBack }) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [screen, setScreen] = useState("home"); // "home" | "show" | "admin" | "profile"
+  const [screen, setScreen] = useState("home");
   const [activeShow, setActiveShow] = useState(null);
+  const [dbShows, setDbShows] = useState([]);
+  const [showsLoading, setShowsLoading] = useState(true);
 
   useEffect(() => {
     document.title = "WillWin / ShouldWin";
@@ -996,13 +1246,32 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
       setUser(session?.user ?? null);
     });
+    loadDbShows();
     return () => subscription.unsubscribe();
   }, []);
 
-  if (loading) return <div className="loading-screen"><div className="loading-inner">Loading…</div></div>;
+  const loadDbShows = async () => {
+    setShowsLoading(true);
+    const { data } = await supabase.from("db_shows").select("*").order("year", { ascending: false });
+    const shows = await Promise.all((data || []).map(async s => {
+      const { data: cats } = await supabase.from("db_show_categories").select("*").eq("show_id", s.id).order("sort_order");
+      return {
+        id: s.id, name: s.name, shortName: s.short_name, org: s.org,
+        year: s.year, date: s.date, status: s.status,
+        categories: (cats || []).map(c => ({ id: c.id, name: c.name, nominees: c.nominees })),
+        fromDb: true,
+      };
+    }));
+    setDbShows(shows);
+    setShowsLoading(false);
+  };
+
+  const allShows = [...SHOWS, ...dbShows];
+
+  if (loading || showsLoading) return <div className="loading-screen"><div className="loading-inner">Loading…</div></div>;
   if (!user) return <AuthModal onAuth={setUser} />;
 
-  if (screen === "admin") return <AdminPanel onBack={() => setScreen("home")} />;
+  if (screen === "admin") return <AdminPanel onBack={() => { setScreen("home"); loadDbShows(); }} />;
 
   if (screen === "show" && activeShow) {
     return <ShowApp show={activeShow} user={user} onGoHome={() => { setScreen("home"); setActiveShow(null); }} />;
@@ -1018,6 +1287,7 @@ export default function App() {
       user={user}
       onGoProfile={() => setScreen("profile")}
       onGoAdmin={() => setScreen("admin")}
+      allShows={allShows}
     />
   );
 }
