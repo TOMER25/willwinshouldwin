@@ -288,7 +288,9 @@ function ShowApp({ show, user, onGoHome }) {
           <div className="header-left">
             <button className="back-home-btn" onClick={onGoHome} title="All shows">←</button>
             <Logo onClick={onGoHome} />
-            <span className="show-context-badge">{show.name}</span>
+            {view !== "profile" && view !== "glossary" && (
+              <span className="show-context-badge">{show.name}</span>
+            )}
           </div>
           <div className="header-right">
             {saving && <span className="save-indicator">saving…</span>}
@@ -680,7 +682,13 @@ function Profile({ user, picks, show }) {
   const [editingMovie, setEditingMovie] = useState(false);
   const [movieDraft, setMovieDraft] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
   const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "Friend";
+
+  // "Member since" — derived from user creation timestamp
+  const memberSince = user.created_at
+    ? new Date(user.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+    : null;
 
   useEffect(() => {
     loadWinners();
@@ -724,6 +732,8 @@ function Profile({ user, picks, show }) {
   const shouldWinCorrect = categoriesWithWinners.filter(c => picks[c.id]?.should_win === winners[c.id]).length;
   const totalAnswered = categoriesWithWinners.length;
   const bothPicked = categories.filter(c => picks[c.id]?.will_win && picks[c.id]?.should_win).length;
+  const willPicked = categories.filter(c => picks[c.id]?.will_win).length;
+  const shouldPicked = categories.filter(c => picks[c.id]?.should_win).length;
   const completionPct = Math.round((bothPicked / categories.length) * 100);
 
   const shareUrl = `${window.location.origin}/?compare=${user.id}`;
@@ -731,88 +741,110 @@ function Profile({ user, picks, show }) {
 
   if (loading) return <div className="app-main"><div className="loading">Loading…</div></div>;
 
-  const currentTheme = COLOR_THEMES.find(t => t.id === profileData.accent_color) || COLOR_THEMES[0];
-
   return (
     <div className="app-main">
       <div className="profile-wrap">
 
-        {/* Identity card */}
+        {/* ── Identity card ── */}
         <div className="profile-card">
           <div className="profile-avatar">{displayName[0].toUpperCase()}</div>
           <div className="profile-info">
             <h2 className="profile-name">{displayName}</h2>
             <p className="profile-email">{user.email}</p>
+            {memberSince && <p className="profile-meta">Member since {memberSince}</p>}
             {profileData.favorite_movie && (
               <p className="profile-fav-movie">❤ {profileData.favorite_movie}</p>
             )}
           </div>
         </div>
 
-        {/* Customization */}
-        <div className="profile-customization">
-          <h3 className="profile-section-title">Customize</h3>
-
-          {/* Color theme */}
-          <div className="theme-section">
-            <p className="theme-label">Color theme</p>
-            <div className="theme-swatches">
-              {COLOR_THEMES.map(theme => (
-                <button
-                  key={theme.id}
-                  className={`theme-swatch ${profileData.accent_color === theme.id ? "selected" : ""}`}
-                  onClick={() => handleThemeChange(theme.id)}
-                  title={`${theme.label} — ${theme.desc}`}
-                >
-                  <span className="swatch-will" style={{ background: theme.will }} />
-                  <span className="swatch-should" style={{ background: theme.should }} />
-                  <span className="swatch-label">{theme.label}</span>
-                </button>
-              ))}
-            </div>
+        {/* ── Ballot at a glance ── */}
+        <div className="profile-glance">
+          <div className="glance-item">
+            <span className="glance-num">{willPicked}</span>
+            <span className="glance-den">/{categories.length}</span>
+            <span className="glance-label">★ Will Win picks</span>
           </div>
-
-          {/* Favorite movie */}
-          <div className="fav-movie-section">
-            <p className="theme-label">Favorite movie</p>
-            {editingMovie ? (
-              <div className="fav-movie-edit">
-                <input
-                  className="auth-input fav-movie-input"
-                  placeholder="e.g. Mulholland Drive"
-                  value={movieDraft}
-                  onChange={e => setMovieDraft(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && saveMovie()}
-                  autoFocus
-                />
-                <div className="fav-movie-actions">
-                  <button className="copy-link-btn" onClick={saveMovie} disabled={savingProfile}>
-                    {savingProfile ? "Saving…" : "Save"}
-                  </button>
-                  <button className="back-btn" onClick={() => setEditingMovie(false)}>Cancel</button>
-                </div>
-              </div>
-            ) : (
-              <div className="fav-movie-display">
-                <span className="fav-movie-value">
-                  {profileData.favorite_movie || <em className="fav-movie-empty">Not set</em>}
-                </span>
-                <button className="fav-movie-edit-btn" onClick={() => { setMovieDraft(profileData.favorite_movie || ""); setEditingMovie(true); }}>
-                  {profileData.favorite_movie ? "Change" : "Add"}
-                </button>
-              </div>
-            )}
+          <div className="glance-divider" />
+          <div className="glance-item">
+            <span className="glance-num">{shouldPicked}</span>
+            <span className="glance-den">/{categories.length}</span>
+            <span className="glance-label">♥ Should Win picks</span>
+          </div>
+          <div className="glance-divider" />
+          <div className="glance-item">
+            <span className="glance-num">{bothPicked}</span>
+            <span className="glance-den">/{categories.length}</span>
+            <span className="glance-label">Both filled</span>
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="profile-stats">
-          <div className="stat-box">
-            <span className="stat-num">{bothPicked}/{categories.length}</span>
-            <span className="stat-label">Ballot complete</span>
-            <div className="stat-bar-track"><div className="stat-bar-fill" style={{ width: `${completionPct}%` }} /></div>
-          </div>
-          {winnersAnnounced ? <>
+        {/* ── Customization (collapsible) ── */}
+        <div className="profile-customization">
+          <button className="customize-toggle" onClick={() => setCustomizeOpen(o => !o)}>
+            <span>Customize</span>
+            <span className="customize-chevron">{customizeOpen ? "−" : "+"}</span>
+          </button>
+
+          {customizeOpen && (
+            <div className="customize-body">
+              {/* Color theme */}
+              <div className="theme-section">
+                <p className="theme-label">Color theme</p>
+                <div className="theme-swatches">
+                  {COLOR_THEMES.map(theme => (
+                    <button
+                      key={theme.id}
+                      className={`theme-swatch ${profileData.accent_color === theme.id ? "selected" : ""}`}
+                      onClick={() => handleThemeChange(theme.id)}
+                      title={`${theme.label} — ${theme.desc}`}
+                    >
+                      <span className="swatch-will" style={{ background: theme.will }} />
+                      <span className="swatch-should" style={{ background: theme.should }} />
+                      <span className="swatch-label">{theme.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Favorite movie — full row */}
+              <div className="fav-movie-section">
+                <p className="theme-label">Favorite movie</p>
+                {editingMovie ? (
+                  <div className="fav-movie-edit">
+                    <input
+                      className="auth-input fav-movie-input"
+                      placeholder="e.g. Mulholland Drive"
+                      value={movieDraft}
+                      onChange={e => setMovieDraft(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && saveMovie()}
+                      autoFocus
+                    />
+                    <div className="fav-movie-actions">
+                      <button className="copy-link-btn" onClick={saveMovie} disabled={savingProfile}>
+                        {savingProfile ? "Saving…" : "Save"}
+                      </button>
+                      <button className="back-btn" onClick={() => setEditingMovie(false)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="fav-movie-display">
+                    <span className="fav-movie-value">
+                      {profileData.favorite_movie || <em className="fav-movie-empty">Not set</em>}
+                    </span>
+                    <button className="fav-movie-edit-btn" onClick={() => { setMovieDraft(profileData.favorite_movie || ""); setEditingMovie(true); }}>
+                      {profileData.favorite_movie ? "Change" : "Add"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Accuracy stats (post-ceremony) ── */}
+        {winnersAnnounced && (
+          <div className="profile-stats">
             <div className="stat-box">
               <span className="stat-num gold">{willWinCorrect}/{totalAnswered}</span>
               <span className="stat-label">★ Will Win correct</span>
@@ -823,24 +855,24 @@ function Profile({ user, picks, show }) {
               <span className="stat-label">♥ Should Win matched</span>
               <div className="stat-bar-track"><div className="stat-bar-fill crimson" style={{ width: `${totalAnswered ? (shouldWinCorrect / totalAnswered) * 100 : 0}%` }} /></div>
             </div>
-          </> : (
-            <div className="stat-box stat-pending">
-              <span className="stat-num">—</span>
-              <span className="stat-label">Accuracy scores available after {show.date}</span>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
+        {!winnersAnnounced && (
+          <div className="profile-pending-note">
+            Accuracy scores will appear here after {show.date || "the ceremony"}.
+          </div>
+        )}
 
-        {/* Share */}
+        {/* ── Share ── */}
         <div className="profile-share">
-          <p className="profile-share-label">Share your ballot with friends</p>
+          <p className="profile-share-label">Share your ballot</p>
           <div className="compare-link-box">
             <span className="compare-link-text">{shareUrl}</span>
             <button className="copy-link-btn" onClick={copyShare}>{copied ? "Copied!" : "Copy"}</button>
           </div>
         </div>
 
-        {/* Results after ceremony */}
+        {/* ── Results after ceremony ── */}
         {winnersAnnounced && (
           <div className="profile-picks-summary">
             <h3 className="profile-section-title">Your Results</h3>
