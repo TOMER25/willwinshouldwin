@@ -672,18 +672,22 @@ function applyTheme(themeId) {
 }
 
 // ============================================================
-// PROFILE
+// OMDB API KEY — get a free key at omdbapi.com
+// Add to your Vercel environment variables as VITE_OMDB_API_KEY
 // ============================================================
+const OMDB_API_KEY = import.meta.env.VITE_OMDB_API_KEY || "";
+
 function Profile({ user, picks, show }) {
   const [winners, setWinners] = useState({});
   const [allPicksByShow, setAllPicksByShow] = useState({});
   const [allShows, setAllShows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
-  const [profileData, setProfileData] = useState({ accent_color: "gold", favorite_movie: "" });
+  const [profileData, setProfileData] = useState({ accent_color: "gold", favorite_movie: "", favorite_movie_poster: "" });
   const [editingMovie, setEditingMovie] = useState(false);
   const [movieDraft, setMovieDraft] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [posterSearch, setPosterSearch] = useState(null); // { loading, results: [{title, year, poster, imdbID}] }
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "Friend";
 
@@ -733,7 +737,9 @@ function Profile({ user, picks, show }) {
   };
 
   const loadProfile = async () => {
-    const { data } = await supabase.from("profiles").select("accent_color, favorite_movie").eq("id", user.id).single();
+    const { data } = await supabase.from("profiles")
+      .select("accent_color, favorite_movie, favorite_movie_poster")
+      .eq("id", user.id).single();
     if (data) {
       setProfileData(data);
       applyTheme(data.accent_color || "gold");
@@ -746,12 +752,53 @@ function Profile({ user, picks, show }) {
     await supabase.from("profiles").update({ accent_color: themeId }).eq("id", user.id);
   };
 
-  const saveMovie = async () => {
+  // Search OMDb as user types (debounced on save click)
+  const searchPosters = async (title) => {
+    if (!title.trim()) return;
+    if (!OMDB_API_KEY) {
+      // No API key — save title only, no poster
+      await commitMovie(title.trim(), "");
+      return;
+    }
+    setPosterSearch({ loading: true, results: [] });
+    try {
+      const res = await fetch(`https://www.omdbapi.com/?s=${encodeURIComponent(title)}&type=movie&apikey=${OMDB_API_KEY}`);
+      const data = await res.json();
+      const results = (data.Search || [])
+        .filter(m => m.Poster && m.Poster !== "N/A")
+        .slice(0, 6)
+        .map(m => ({ title: m.Title, year: m.Year, poster: m.Poster, imdbID: m.imdbID }));
+      if (results.length === 0) {
+        // No results — save without poster
+        await commitMovie(title.trim(), "");
+      } else if (results.length === 1) {
+        // Only one result — auto-select it
+        await commitMovie(results[0].title, results[0].poster);
+      } else {
+        setPosterSearch({ loading: false, results });
+      }
+    } catch {
+      await commitMovie(title.trim(), "");
+    }
+  };
+
+  const commitMovie = async (title, poster) => {
     setSavingProfile(true);
-    await supabase.from("profiles").update({ favorite_movie: movieDraft.trim() }).eq("id", user.id);
-    setProfileData(prev => ({ ...prev, favorite_movie: movieDraft.trim() }));
+    await supabase.from("profiles")
+      .update({ favorite_movie: title, favorite_movie_poster: poster })
+      .eq("id", user.id);
+    setProfileData(prev => ({ ...prev, favorite_movie: title, favorite_movie_poster: poster }));
+    setPosterSearch(null);
     setEditingMovie(false);
     setSavingProfile(false);
+  };
+
+  const saveMovie = () => searchPosters(movieDraft);
+
+  const cancelEdit = () => {
+    setEditingMovie(false);
+    setPosterSearch(null);
+    setMovieDraft("");
   };
 
   // Per-show ballot stats — recomputes whenever allShows or allPicksByShow changes
@@ -784,7 +831,13 @@ function Profile({ user, picks, show }) {
 
         {/* ── Identity card ── */}
         <div className="profile-card">
-          <div className="profile-avatar">{displayName[0].toUpperCase()}</div>
+          {profileData.favorite_movie_poster ? (
+            <div className="profile-poster-wrap">
+              <img className="profile-poster" src={profileData.favorite_movie_poster} alt={profileData.favorite_movie} />
+            </div>
+          ) : (
+            <div className="profile-avatar">{displayName[0].toUpperCase()}</div>
+          )}
           <div className="profile-info">
             <h2 className="profile-name">{displayName}</h2>
             <p className="profile-email">{user.email}</p>
@@ -856,7 +909,29 @@ function Profile({ user, picks, show }) {
               {/* Favorite movie — full row */}
               <div className="fav-movie-section">
                 <p className="theme-label">Favorite movie</p>
-                {editingMovie ? (
+
+                {/* Poster picker — shown after typing a title */}
+                {posterSearch && !posterSearch.loading && posterSearch.results.length > 0 ? (
+                  <div className="poster-picker">
+                    <p className="poster-picker-label">Pick the right one:</p>
+                    <div className="poster-grid">
+                      {posterSearch.results.map(r => (
+                        <button key={r.imdbID} className="poster-option" onClick={() => commitMovie(r.title, r.poster)}>
+                          <img src={r.poster} alt={r.title} className="poster-thumb" />
+                          <span className="poster-title">{r.title}</span>
+                          <span className="poster-year">{r.year}</span>
+                        </button>
+                      ))}
+                      <button className="poster-option poster-none" onClick={() => commitMovie(movieDraft.trim(), "")}>
+                        <span className="poster-none-icon">✕</span>
+                        <span className="poster-title">No poster</span>
+                      </button>
+                    </div>
+                    <button className="back-btn" style={{ marginTop: "0.5rem" }} onClick={cancelEdit}>Cancel</button>
+                  </div>
+                ) : posterSearch?.loading ? (
+                  <p className="fav-movie-searching">Searching…</p>
+                ) : editingMovie ? (
                   <div className="fav-movie-edit">
                     <input
                       className="auth-input fav-movie-input"
@@ -868,9 +943,9 @@ function Profile({ user, picks, show }) {
                     />
                     <div className="fav-movie-actions">
                       <button className="copy-link-btn" onClick={saveMovie} disabled={savingProfile}>
-                        {savingProfile ? "Saving…" : "Save"}
+                        {savingProfile ? "Saving…" : "Search"}
                       </button>
-                      <button className="back-btn" onClick={() => setEditingMovie(false)}>Cancel</button>
+                      <button className="back-btn" onClick={cancelEdit}>Cancel</button>
                     </div>
                   </div>
                 ) : (
