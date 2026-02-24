@@ -1363,7 +1363,6 @@ function StandaloneProfile({ user, onBack, allShows }) {
         <h2 className="section-title">My Profile</h2>
         {allShows.map(show => (
           <div key={show.id} style={{ marginBottom: "2rem" }}>
-            <h3 style={{ fontFamily: "Playfair Display, serif", color: "var(--gold-light)", marginBottom: "1rem" }}>{show.name}</h3>
             <Profile user={user} picks={{}} show={show} />
           </div>
         ))}
