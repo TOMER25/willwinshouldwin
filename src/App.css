@@ -151,7 +151,8 @@ body {
   font-weight: 900; line-height: 1.1;
   color: var(--white); margin-bottom: 1rem;
 }
-.home-title-accent { color: var(--gold); }
+.home-title-will { color: var(--gold); }
+.home-title-should { color: var(--crimson); }
 .home-subtitle {
   font-size: 0.88rem; color: var(--text-dim);
   line-height: 1.7; max-width: 480px;

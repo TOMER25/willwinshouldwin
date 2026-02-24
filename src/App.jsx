@@ -213,7 +213,7 @@ function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin }) {
 
       <div className="home-content">
         <div className="home-hero">
-          <h1 className="home-title">Who will win.<br /><span className="home-title-accent">Who should win.</span></h1>
+          <h1 className="home-title"><span className="home-title-will">Who will win.</span><br /><span className="home-title-should">Who should win.</span></h1>
           <p className="home-subtitle">Make your predictions across every category. Compare with friends. See how your taste stacks up against the voters.</p>
         </div>
 
