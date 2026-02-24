@@ -311,10 +311,10 @@ function ShowApp({ show, user, allShows, onGoHome }) {
       {view === "picks" && <PicksView picks={picks} aggregates={aggregates} onPick={handlePick} categories={CATEGORIES} />}
       {view === "community" && <Community currentUserId={user.id} show={show} />}
       {view === "leaderboard" && <Leaderboard currentUserId={user.id} show={show} />}
-      {view === "profile" && <Profile user={user} picks={picks} show={show} allShows={allShows} />}
+      {view === "profile" && <Profile user={user} picks={picks} show={show} />}
       {view === "glossary" && <GlossaryView />}
 
-      <footer className="app-footer">{show.name} · willwinshouldwin.com</footer>
+      <footer className="app-footer">{view === "profile" || view === "glossary" ? "willwinshouldwin.com" : `${show.name} · willwinshouldwin.com`}</footer>
     </div>
   );
 }
@@ -674,9 +674,10 @@ function applyTheme(themeId) {
 // ============================================================
 // PROFILE
 // ============================================================
-function Profile({ user, picks, show, allShows = [] }) {
+function Profile({ user, picks, show }) {
   const [winners, setWinners] = useState({});
   const [allPicksByShow, setAllPicksByShow] = useState({});
+  const [allShows, setAllShows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [profileData, setProfileData] = useState({ accent_color: "gold", favorite_movie: "" });
@@ -696,20 +697,38 @@ function Profile({ user, picks, show, allShows = [] }) {
   }, [show.id]);
 
   const loadAll = async () => {
-    // Load winners for current show
-    const { data: winData } = await supabase.from("winners").select("*").eq("show_id", show.id);
+    // Run all three fetches in parallel
+    const [winResult, picksResult, showsResult] = await Promise.all([
+      supabase.from("winners").select("*").eq("show_id", show.id),
+      supabase.from("picks").select("*").eq("user_id", user.id),
+      supabase.from("db_shows").select("*").order("year", { ascending: false }),
+    ]);
+
+    // Winners for current show
     const winMap = {};
-    (winData || []).forEach(w => { winMap[w.category_id] = w.will_win_winner; });
+    (winResult.data || []).forEach(w => { winMap[w.category_id] = w.will_win_winner; });
     setWinners(winMap);
 
-    // Load ALL picks for this user across every show
-    const { data: allPicks } = await supabase.from("picks").select("*").eq("user_id", user.id);
+    // All picks keyed by show_id → category_id
     const byShow = {};
-    (allPicks || []).forEach(p => {
+    (picksResult.data || []).forEach(p => {
       if (!byShow[p.show_id]) byShow[p.show_id] = {};
       byShow[p.show_id][p.category_id] = p;
     });
     setAllPicksByShow(byShow);
+
+    // All shows with their categories
+    const shows = await Promise.all((showsResult.data || []).map(async s => {
+      const { data: cats } = await supabase
+        .from("db_show_categories").select("*")
+        .eq("show_id", s.id).order("sort_order");
+      return {
+        id: s.id, name: s.name, shortName: s.short_name,
+        year: s.year, date: s.date, status: s.status,
+        categories: (cats || []).map(c => ({ id: c.id, name: c.name, nominees: c.nominees })),
+      };
+    }));
+    setAllShows(shows);
     setLoading(false);
   };
 
@@ -735,7 +754,7 @@ function Profile({ user, picks, show, allShows = [] }) {
     setSavingProfile(false);
   };
 
-  // Per-show ballot stats
+  // Per-show ballot stats — recomputes whenever allShows or allPicksByShow changes
   const showStats = allShows.map(s => {
     const showPicks = allPicksByShow[s.id] || {};
     const total = s.categories.length;
@@ -749,7 +768,7 @@ function Profile({ user, picks, show, allShows = [] }) {
   const categories = show.categories;
   const winnersAnnounced = Object.keys(winners).length > 0;
   const categoriesWithWinners = categories.filter(c => winners[c.id]);
-  const currentPicks = allPicksByShow[show.id] || picks; // fall back to prop picks
+  const currentPicks = allPicksByShow[show.id] || picks;
   const willWinCorrect = categoriesWithWinners.filter(c => currentPicks[c.id]?.will_win === winners[c.id]).length;
   const shouldWinCorrect = categoriesWithWinners.filter(c => currentPicks[c.id]?.should_win === winners[c.id]).length;
   const totalAnswered = categoriesWithWinners.length;
