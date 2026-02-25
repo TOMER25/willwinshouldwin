@@ -798,7 +798,6 @@ function Leagues({ currentUserId, show, allProfiles }) {
         {leagues.map(league => (
           <button key={league.id} className="league-row" onClick={() => openLeague(league)}>
             <span className="league-row-name">{league.name}</span>
-            <span className="league-row-code">{league.invite_code}</span>
             <span className="league-row-arrow">→</span>
           </button>
         ))}
