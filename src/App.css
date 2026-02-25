@@ -1004,3 +1004,202 @@ body {
   font-style: italic;
   padding: 0.4rem 0;
 }
+
+/* ============================================================
+   PROFILE CARD — poster on right
+   ============================================================ */
+
+.profile-poster-wrap {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 52px;
+  height: 78px;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}
+
+.profile-poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ============================================================
+   LEAGUES
+   ============================================================ */
+
+.leagues-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-top: 0.5rem;
+}
+
+.leagues-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.leagues-header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.leagues-empty {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.5rem 1.25rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.leagues-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.league-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.league-row:hover { border-color: var(--gold); background: var(--gold-dim); }
+
+.league-row-name {
+  flex: 1;
+  font-family: 'Playfair Display', serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--white);
+}
+
+.league-row-code {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  background: var(--bg3);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.league-row-arrow {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* League detail */
+.league-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.league-invite-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+}
+
+.league-invite-label {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.league-invite-code {
+  font-family: 'DM Mono', monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 0.15em;
+  flex: 1;
+}
+
+.league-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* League leaderboard table */
+.league-lb {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.league-lb-header {
+  display: grid;
+  grid-template-columns: 1.5rem 1fr repeat(4, auto);
+  gap: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg3);
+}
+
+.league-lb-row {
+  display: grid;
+  grid-template-columns: 1.5rem 1fr repeat(4, auto);
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--text);
+  transition: background 0.15s;
+}
+.league-lb-row:last-child { border-bottom: none; }
+.league-lb-row:hover { background: var(--bg3); }
+.league-lb-row.league-lb-you { background: var(--gold-dim); }
+
+.lb-rank { font-size: 0.65rem; color: var(--text-muted); }
+.lb-name { font-weight: 600; color: var(--white); }
+.lb-score { color: var(--text-dim); font-family: 'DM Mono', monospace; font-size: 0.78rem; text-align: right; }
+.lb-total { color: var(--gold); font-family: 'Playfair Display', serif; font-weight: 700; font-size: 0.9rem; text-align: right; }
+
+.league-leave-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  padding: 0.5rem 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: border-color 0.2s, color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  margin-top: 0.5rem;
+}
+.league-leave-btn:hover { border-color: var(--crimson); color: var(--crimson); }

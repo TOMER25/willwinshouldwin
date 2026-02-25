@@ -460,6 +460,7 @@ function Leaderboard({ currentUserId, show }) {
 // COMMUNITY
 // ============================================================
 function Community({ currentUserId, show }) {
+  const [tab, setTab] = useState("community"); // "community" | "compare" | "leagues"
   const [allPicks, setAllPicks] = useState({});
   const [loading, setLoading] = useState(true);
   const [compareUser, setCompareUser] = useState(null);
@@ -467,7 +468,6 @@ function Community({ currentUserId, show }) {
   const [userList, setUserList] = useState([]);
   const [comparePicks, setComparePicks] = useState({});
   const [myPicks, setMyPicks] = useState({});
-  const [compareMode, setCompareMode] = useState(false);
 
   useEffect(() => { loadAll(); }, [show.id]);
 
@@ -519,7 +519,6 @@ function Community({ currentUserId, show }) {
 
   const handleSelectUser = async (profile) => {
     setCompareUser(profile);
-    setCompareMode(true);
     await loadComparePicks(profile.id);
   };
 
@@ -532,11 +531,13 @@ function Community({ currentUserId, show }) {
   return (
     <div className="app-main">
       <div className="community-tabs">
-        <button className={!compareMode ? "active" : ""} onClick={() => setCompareMode(false)}>Community Picks</button>
-        <button className={compareMode ? "active" : ""} onClick={() => setCompareMode(true)}>Compare with a Friend</button>
+        <button className={tab === "community" ? "active" : ""} onClick={() => setTab("community")}>Community</button>
+        <button className={tab === "compare" ? "active" : ""} onClick={() => { setTab("compare"); setCompareUser(null); }}>Compare</button>
+        <button className={tab === "leagues" ? "active" : ""} onClick={() => setTab("leagues")}>Leagues</button>
       </div>
 
-      {!compareMode && (
+      {/* ── COMMUNITY PICKS ── */}
+      {tab === "community" && (
         <>
           <div className="community-legend">
             <span className="agg-badge will-agg">★%</span> Will Win consensus &nbsp;
@@ -565,7 +566,8 @@ function Community({ currentUserId, show }) {
         </>
       )}
 
-      {compareMode && (
+      {/* ── COMPARE ── */}
+      {tab === "compare" && (
         <div className="compare-wrap">
           {!compareUser ? (
             <div className="compare-search-wrap">
@@ -636,8 +638,261 @@ function Community({ currentUserId, show }) {
           )}
         </div>
       )}
+
+      {/* ── LEAGUES ── */}
+      {tab === "leagues" && (
+        <Leagues currentUserId={currentUserId} show={show} allProfiles={userList} />
+      )}
     </div>
   );
+}
+
+// ============================================================
+// LEAGUES
+// ============================================================
+function Leagues({ currentUserId, show, allProfiles }) {
+  const [leagues, setLeagues] = useState([]);       // leagues I belong to
+  const [activeLeague, setActiveLeague] = useState(null);
+  const [leagueView, setLeagueView] = useState("list"); // "list" | "detail" | "create" | "join"
+  const [loading, setLoading] = useState(true);
+
+  // Create form state
+  const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+
+  // Join form state
+  const [joinCode, setJoinCode] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState("");
+
+  // League detail state
+  const [leagueMembers, setLeagueMembers] = useState([]);
+  const [leagueWinners, setLeagueWinners] = useState({});
+  const [memberPicks, setMemberPicks] = useState({});
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  useEffect(() => { loadLeagues(); }, [show.id]);
+
+  const loadLeagues = async () => {
+    setLoading(true);
+    const { data: memberships } = await supabase
+      .from("league_members").select("league_id")
+      .eq("user_id", currentUserId);
+    if (!memberships?.length) { setLeagues([]); setLoading(false); return; }
+    const ids = memberships.map(m => m.league_id);
+    const { data } = await supabase.from("leagues").select("*").in("id", ids).order("created_at");
+    setLeagues(data || []);
+    setLoading(false);
+  };
+
+  const createLeague = async () => {
+    if (!newName.trim()) return setCreateError("Give your league a name.");
+    setCreating(true); setCreateError("");
+    // Generate a short invite code
+    const code = Math.random().toString(36).slice(2, 8).toUpperCase();
+    const { data: league, error } = await supabase
+      .from("leagues").insert({ name: newName.trim(), owner_id: currentUserId, invite_code: code })
+      .select().single();
+    if (error) { setCreating(false); return setCreateError(error.message); }
+    await supabase.from("league_members").insert({ league_id: league.id, user_id: currentUserId });
+    setCreating(false);
+    setNewName("");
+    await loadLeagues();
+    openLeague(league);
+  };
+
+  const joinLeague = async () => {
+    if (!joinCode.trim()) return setJoinError("Enter an invite code.");
+    setJoining(true); setJoinError("");
+    const { data: league, error } = await supabase
+      .from("leagues").select("*").eq("invite_code", joinCode.trim().toUpperCase()).single();
+    if (error || !league) { setJoining(false); return setJoinError("Invalid invite code — double check it."); }
+    // Check not already a member
+    const { data: existing } = await supabase.from("league_members")
+      .select("id").eq("league_id", league.id).eq("user_id", currentUserId).single();
+    if (existing) { setJoining(false); return setJoinError("You're already in this league!"); }
+    await supabase.from("league_members").insert({ league_id: league.id, user_id: currentUserId });
+    setJoining(false);
+    setJoinCode("");
+    await loadLeagues();
+    openLeague(league);
+  };
+
+  const openLeague = async (league) => {
+    setActiveLeague(league);
+    setLeagueView("detail");
+    // Load members
+    const { data: members } = await supabase
+      .from("league_members").select("user_id").eq("league_id", league.id);
+    const memberIds = (members || []).map(m => m.user_id);
+    const profiles = allProfiles.filter(p => memberIds.includes(p.id));
+    // Add current user if not in allProfiles
+    const selfProfile = { id: currentUserId, display_name: "You" };
+    const allMembers = memberIds.includes(currentUserId)
+      ? [selfProfile, ...profiles.filter(p => p.id !== currentUserId)]
+      : profiles;
+    setLeagueMembers(allMembers);
+
+    // Load winners for current show
+    const { data: winData } = await supabase.from("winners").select("*").eq("show_id", show.id);
+    const winMap = {};
+    (winData || []).forEach(w => { winMap[w.category_id] = w.will_win_winner; });
+    setLeagueWinners(winMap);
+
+    // Load picks for all members
+    const { data: picks } = await supabase.from("picks").select("*")
+      .eq("show_id", show.id).in("user_id", memberIds);
+    const byUser = {};
+    (picks || []).forEach(p => {
+      if (!byUser[p.user_id]) byUser[p.user_id] = {};
+      byUser[p.user_id][p.category_id] = p;
+    });
+    setMemberPicks(byUser);
+  };
+
+  const leaveLeague = async (leagueId) => {
+    await supabase.from("league_members")
+      .delete().eq("league_id", leagueId).eq("user_id", currentUserId);
+    setLeagueView("list");
+    setActiveLeague(null);
+    loadLeagues();
+  };
+
+  const copyInvite = (code) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const winnersAnnounced = Object.keys(leagueWinners).length > 0;
+
+  // Compute leaderboard for active league
+  const leagueLeaderboard = leagueMembers.map(member => {
+    const picks = memberPicks[member.id] || {};
+    const willCorrect = Object.entries(leagueWinners).filter(([catId, winner]) => picks[catId]?.will_win === winner).length;
+    const shouldCorrect = Object.entries(leagueWinners).filter(([catId, winner]) => picks[catId]?.should_win === winner).length;
+    const bothPicked = show.categories.filter(c => picks[c.id]?.will_win && picks[c.id]?.should_win).length;
+    return { ...member, willCorrect, shouldCorrect, total: willCorrect + shouldCorrect, bothPicked };
+  }).sort((a, b) => b.total - a.total || b.willCorrect - a.willCorrect);
+
+  if (loading) return <div className="loading">Loading leagues…</div>;
+
+  // ── LIST VIEW ──
+  if (leagueView === "list") return (
+    <div className="leagues-wrap">
+      <div className="leagues-header">
+        <h3 className="compare-title">My Leagues</h3>
+        <div className="leagues-header-actions">
+          <button className="add-cat-btn" onClick={() => setLeagueView("join")}>Join</button>
+          <button className="add-cat-btn" onClick={() => setLeagueView("create")}>+ Create</button>
+        </div>
+      </div>
+      {leagues.length === 0 && (
+        <div className="leagues-empty">
+          <p>You're not in any leagues yet.</p>
+          <p>Create one and share the invite code with friends, or enter a code to join an existing league.</p>
+        </div>
+      )}
+      <div className="leagues-list">
+        {leagues.map(league => (
+          <button key={league.id} className="league-row" onClick={() => openLeague(league)}>
+            <span className="league-row-name">{league.name}</span>
+            <span className="league-row-code">{league.invite_code}</span>
+            <span className="league-row-arrow">→</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ── CREATE VIEW ──
+  if (leagueView === "create") return (
+    <div className="leagues-wrap">
+      <button className="back-btn" onClick={() => { setLeagueView("list"); setCreateError(""); }}>← Back</button>
+      <h3 className="compare-title" style={{ marginTop: "1rem" }}>Create a League</h3>
+      <p className="admin-hint">Give your league a name. You'll get a short invite code to share with friends.</p>
+      {createError && <div className="auth-error" style={{ marginBottom: "0.75rem" }}>{createError}</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxWidth: "380px" }}>
+        <input className="auth-input" placeholder="League name, e.g. Oscar Night 2026" value={newName}
+          onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && createLeague()} />
+        <button className="auth-submit" style={{ width: "auto" }} onClick={createLeague} disabled={creating}>
+          {creating ? "Creating…" : "Create League"}
+        </button>
+      </div>
+    </div>
+  );
+
+  // ── JOIN VIEW ──
+  if (leagueView === "join") return (
+    <div className="leagues-wrap">
+      <button className="back-btn" onClick={() => { setLeagueView("list"); setJoinError(""); }}>← Back</button>
+      <h3 className="compare-title" style={{ marginTop: "1rem" }}>Join a League</h3>
+      <p className="admin-hint">Enter the 6-character invite code from the league creator.</p>
+      {joinError && <div className="auth-error" style={{ marginBottom: "0.75rem" }}>{joinError}</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxWidth: "380px" }}>
+        <input className="auth-input" placeholder="Invite code, e.g. XK9F2A" value={joinCode}
+          onChange={e => setJoinCode(e.target.value.toUpperCase())} onKeyDown={e => e.key === "Enter" && joinLeague()} />
+        <button className="auth-submit" style={{ width: "auto" }} onClick={joinLeague} disabled={joining}>
+          {joining ? "Joining…" : "Join League"}
+        </button>
+      </div>
+    </div>
+  );
+
+  // ── DETAIL VIEW ──
+  if (leagueView === "detail" && activeLeague) return (
+    <div className="leagues-wrap">
+      <div className="league-detail-header">
+        <button className="back-btn" onClick={() => { setLeagueView("list"); setActiveLeague(null); }}>← Leagues</button>
+        <h3 className="compare-title">{activeLeague.name}</h3>
+      </div>
+
+      {/* Invite code */}
+      <div className="league-invite-row">
+        <span className="league-invite-label">Invite code</span>
+        <span className="league-invite-code">{activeLeague.invite_code}</span>
+        <button className="copy-link-btn" onClick={() => copyInvite(activeLeague.invite_code)}>
+          {copiedCode ? "Copied!" : "Copy"}
+        </button>
+      </div>
+
+      {/* Leaderboard */}
+      <div className="league-section">
+        <p className="profile-section-label">{winnersAnnounced ? "Leaderboard" : "Members & Progress"}</p>
+        <div className="league-lb">
+          <div className="league-lb-header">
+            <span>Name</span>
+            {winnersAnnounced ? <><span>★</span><span>♥</span><span>Total</span></> : <span>Ballot</span>}
+          </div>
+          {leagueLeaderboard.map((member, i) => (
+            <div key={member.id} className={`league-lb-row ${member.id === currentUserId ? "league-lb-you" : ""}`}>
+              <span className="lb-rank">#{i + 1}</span>
+              <span className="lb-name">
+                {member.id === currentUserId ? "You" : (member.display_name || "Member")}
+              </span>
+              {winnersAnnounced ? (
+                <>
+                  <span className="lb-score">{member.willCorrect}</span>
+                  <span className="lb-score">{member.shouldCorrect}</span>
+                  <span className="lb-total">{member.total}</span>
+                </>
+              ) : (
+                <span className="lb-score">{member.bothPicked}/{show.categories.length}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Leave button */}
+      <button className="league-leave-btn" onClick={() => leaveLeague(activeLeague.id)}>
+        Leave league
+      </button>
+    </div>
+  );
+
+  return null;
 }
 
 // ============================================================
@@ -831,21 +1086,19 @@ function Profile({ user, picks, show }) {
 
         {/* ── Identity card ── */}
         <div className="profile-card">
-          {profileData.favorite_movie_poster ? (
-            <div className="profile-poster-wrap">
-              <img className="profile-poster" src={profileData.favorite_movie_poster} alt={profileData.favorite_movie} />
-            </div>
-          ) : (
-            <div className="profile-avatar">{displayName[0].toUpperCase()}</div>
-          )}
+          <div className="profile-avatar">{displayName[0].toUpperCase()}</div>
           <div className="profile-info">
             <h2 className="profile-name">{displayName}</h2>
-            <p className="profile-email">{user.email}</p>
             {memberSince && <p className="profile-meta">Member since {memberSince}</p>}
             {profileData.favorite_movie && (
               <p className="profile-fav-movie">❤ {profileData.favorite_movie}</p>
             )}
           </div>
+          {profileData.favorite_movie_poster && (
+            <div className="profile-poster-wrap">
+              <img className="profile-poster" src={profileData.favorite_movie_poster} alt={profileData.favorite_movie} />
+            </div>
+          )}
         </div>
 
         {/* ── Ballots across all shows ── */}
