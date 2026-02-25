@@ -1273,29 +1273,40 @@ function Profile({ user, picks, show }) {
 // GLOSSARY
 // ============================================================
 function GlossaryView() {
-  const [open, setOpen] = useState({});
-  const toggle = key => setOpen(prev => ({ ...prev, [key]: !prev[key] }));
+  const [openSections, setOpenSections] = useState({});
+  const [openItems, setOpenItems] = useState({});
+
+  const toggleSection = key => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+  const toggleItem = key => setOpenItems(prev => ({ ...prev, [key]: !prev[key] }));
+
   return (
     <div className="app-main">
       <h2 className="section-title">Guide & Glossary</h2>
       <p className="glossary-intro">Everything you need to understand the ballot — from how Will Win and Should Win works, to what every category means.</p>
-      {GLOSSARY.map(section => (
-        <div key={section.section} className="glossary-section">
-          <h3 className="glossary-section-title">{section.section}</h3>
-          {section.items.map(item => {
-            const key = `${section.section}-${item.term}`;
-            return (
-              <div key={key} className={`glossary-item ${open[key] ? "open" : ""}`}>
-                <button className="glossary-term" onClick={() => toggle(key)}>
-                  <span>{item.term}</span>
-                  <span className="glossary-chevron">{open[key] ? "−" : "+"}</span>
-                </button>
-                {open[key] && <div className="glossary-def">{item.def}</div>}
-              </div>
-            );
-          })}
-        </div>
-      ))}
+      {GLOSSARY.map(section => {
+        const sectionOpen = !!openSections[section.section];
+        return (
+          <div key={section.section} className={`glossary-section ${sectionOpen ? "open" : ""}`}>
+            <button className="glossary-section-btn" onClick={() => toggleSection(section.section)}>
+              <span>{section.section}</span>
+              <span className="glossary-chevron">{sectionOpen ? "−" : "+"}</span>
+            </button>
+            {sectionOpen && section.items.map(item => {
+              const key = `${section.section}-${item.term}`;
+              const itemOpen = !!openItems[key];
+              return (
+                <div key={key} className={`glossary-item ${itemOpen ? "open" : ""}`}>
+                  <button className="glossary-term" onClick={() => toggleItem(key)}>
+                    <span>{item.term}</span>
+                    <span className="glossary-chevron">{itemOpen ? "−" : "+"}</span>
+                  </button>
+                  {itemOpen && <div className="glossary-def">{item.def}</div>}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }
