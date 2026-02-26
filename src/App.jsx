@@ -6,10 +6,9 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "YOUR_SUPABA
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ============================================================
-// ADMIN PASSWORD
-// Change this to something only you know
+// ADMIN PASSWORD — set VITE_ADMIN_PASSWORD in Vercel env vars
 // ============================================================
-const ADMIN_PASSWORD = "oscars2026admin";
+const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "oscars2026admin";
 
 // ============================================================
 // GLOSSARY
@@ -102,6 +101,7 @@ function AuthModal({ onAuth }) {
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [awaitingConfirm, setAwaitingConfirm] = useState(false);
 
   const handleSubmit = async () => {
     setLoading(true); setError("");
@@ -111,14 +111,35 @@ function AuthModal({ onAuth }) {
         if (error) throw error;
         onAuth(data.user);
       } else {
-        const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { display_name: displayName } } });
+        const { error } = await supabase.auth.signUp({
+          email, password,
+          options: { data: { display_name: displayName.trim() || email.split("@")[0] } }
+        });
         if (error) throw error;
-        if (data.user) onAuth(data.user);
-        else setError("Check your email to confirm your account, then log in.");
+        setAwaitingConfirm(true);
       }
     } catch (e) { setError(e.message); }
     setLoading(false);
   };
+
+  if (awaitingConfirm) return (
+    <div className="auth-backdrop">
+      <div className="auth-modal">
+        <Logo />
+        <div className="auth-confirm-box">
+          <p className="auth-confirm-icon">✉</p>
+          <h3 className="auth-confirm-title">Check your email</h3>
+          <p className="auth-confirm-body">
+            We sent a confirmation link to <strong>{email}</strong>.
+            Click it to activate your account, then come back here to sign in.
+          </p>
+          <button className="auth-submit" onClick={() => { setAwaitingConfirm(false); setMode("login"); }}>
+            Back to Sign In
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="auth-backdrop">
@@ -126,14 +147,16 @@ function AuthModal({ onAuth }) {
         <Logo />
         <p className="auth-tagline">Make your picks. Own your taste.</p>
         <div className="auth-tabs">
-          <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>Sign In</button>
-          <button className={mode === "signup" ? "active" : ""} onClick={() => setMode("signup")}>Join</button>
+          <button className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Sign In</button>
+          <button className={mode === "signup" ? "active" : ""} onClick={() => { setMode("signup"); setError(""); }}>Join</button>
         </div>
-        {mode === "signup" && <input className="auth-input" placeholder="Display name" value={displayName} onChange={e => setDisplayName(e.target.value)} />}
+        {mode === "signup" && <input className="auth-input" placeholder="Display name (optional)" value={displayName} onChange={e => setDisplayName(e.target.value)} />}
         <input className="auth-input" type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
         <input className="auth-input" type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} />
         {error && <div className="auth-error">{error}</div>}
-        <button className="auth-submit" onClick={handleSubmit} disabled={loading}>{loading ? "…" : mode === "login" ? "Sign In" : "Create Account"}</button>
+        <button className="auth-submit" onClick={handleSubmit} disabled={loading}>
+          {loading ? "…" : mode === "login" ? "Sign In" : "Create Account"}
+        </button>
       </div>
     </div>
   );
@@ -209,13 +232,18 @@ function ShowApp({ show, user, allShows, onGoHome }) {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState(false);
   const [view, setView] = useState("picks");
+  const [showResultsModal, setShowResultsModal] = useState(false);
+  const [winners, setWinners] = useState({});
 
   const CATEGORIES = show.categories;
+  const ballotsOpen = show.ballots_open !== false; // default true
+  const resultsPublished = show.results_published === true;
 
   useEffect(() => {
     document.title = `${show.name} — WillWin/ShouldWin`;
     loadPicks();
     loadAggregates();
+    if (resultsPublished) checkResultsSeen();
     return () => { document.title = "WillWin / ShouldWin"; };
   }, [show.id]);
 
@@ -256,7 +284,28 @@ function ShowApp({ show, user, allShows, onGoHome }) {
     setAggregates(pctMap);
   };
 
+  const checkResultsSeen = async () => {
+    // Load winners
+    const { data: winData } = await supabase.from("winners").select("*").eq("show_id", show.id);
+    const winMap = {};
+    (winData || []).forEach(w => { winMap[w.category_id] = w.will_win_winner; });
+    setWinners(winMap);
+    // Check if user has seen the reveal already
+    const { data: seen } = await supabase.from("results_seen")
+      .select("id").eq("user_id", user.id).eq("show_id", show.id).single();
+    if (!seen) setShowResultsModal(true);
+  };
+
+  const dismissResultsModal = async () => {
+    setShowResultsModal(false);
+    await supabase.from("results_seen").upsert(
+      { user_id: user.id, show_id: show.id },
+      { onConflict: "user_id,show_id" }
+    );
+  };
+
   const handlePick = async (categoryId, pickType, value) => {
+    if (!ballotsOpen) return;
     const newPicks = { ...picks, [categoryId]: { ...picks[categoryId], [pickType]: value } };
     setPicks(newPicks);
     setSaving(true);
@@ -283,6 +332,16 @@ function ShowApp({ show, user, allShows, onGoHome }) {
 
   return (
     <div className="app">
+      {showResultsModal && (
+        <ResultsModal
+          show={show}
+          picks={picks}
+          winners={winners}
+          user={user}
+          onClose={dismissResultsModal}
+        />
+      )}
+
       <header className="app-header">
         <div className="header-top">
           <div className="header-left">
@@ -308,7 +367,18 @@ function ShowApp({ show, user, allShows, onGoHome }) {
         </nav>
       </header>
 
-      {view === "picks" && <PicksView picks={picks} aggregates={aggregates} onPick={handlePick} categories={CATEGORIES} />}
+      {view === "picks" && (
+        <PicksView
+          picks={picks}
+          aggregates={aggregates}
+          onPick={handlePick}
+          categories={CATEGORIES}
+          ballotsOpen={ballotsOpen}
+          resultsPublished={resultsPublished}
+          winners={winners}
+          onShowResults={() => setShowResultsModal(true)}
+        />
+      )}
       {view === "community" && <Community currentUserId={user.id} show={show} />}
       {view === "leaderboard" && <Leaderboard currentUserId={user.id} show={show} />}
       {view === "profile" && <Profile user={user} picks={picks} show={show} />}
@@ -322,7 +392,7 @@ function ShowApp({ show, user, allShows, onGoHome }) {
 // ============================================================
 // PICKS VIEW
 // ============================================================
-function PicksView({ picks, aggregates, onPick, categories }) {
+function PicksView({ picks, aggregates, onPick, categories, ballotsOpen, resultsPublished, winners, onShowResults }) {
   const bothPicked = categories.filter(c => picks[c.id]?.will_win && picks[c.id]?.should_win).length;
   const allDone = bothPicked === categories.length;
 
@@ -339,14 +409,36 @@ function PicksView({ picks, aggregates, onPick, categories }) {
           <div className="progress-track">
             <div className="progress-fill" style={{ width: `${(bothPicked / categories.length) * 100}%` }} />
           </div>
-          {!allDone && <button className="jump-btn" onClick={jumpToNext}>Next unpicked ↓</button>}
-          {allDone && <span className="progress-done">All done! ✓</span>}
+          {!ballotsOpen && !resultsPublished && (
+            <span className="ballots-closed-badge">Ballots closed</span>
+          )}
+          {resultsPublished && (
+            <button className="reveal-results-btn" onClick={onShowResults}>See your results ✦</button>
+          )}
+          {ballotsOpen && !allDone && <button className="jump-btn" onClick={jumpToNext}>Next unpicked ↓</button>}
+          {ballotsOpen && allDone && <span className="progress-done">All done! ✓</span>}
         </div>
       </div>
+
+      {!ballotsOpen && !resultsPublished && (
+        <div className="ballots-closed-banner">
+          <span className="ballots-closed-icon">🎬</span>
+          <p>Ballots are closed — the ceremony is underway. Results will appear here once the night is over.</p>
+        </div>
+      )}
+
       <div className="app-main">
         <div className="picks-grid">
           {categories.map(cat => (
-            <CategoryCard key={cat.id} category={cat} userPicks={picks} onPick={onPick} aggregates={aggregates} />
+            <CategoryCard
+              key={cat.id}
+              category={cat}
+              userPicks={picks}
+              onPick={onPick}
+              aggregates={aggregates}
+              locked={!ballotsOpen}
+              winner={winners?.[cat.id]}
+            />
           ))}
         </div>
       </div>
@@ -357,12 +449,15 @@ function PicksView({ picks, aggregates, onPick, categories }) {
 // ============================================================
 // CATEGORY CARD
 // ============================================================
-function CategoryCard({ category, userPicks, onPick, aggregates }) {
+function CategoryCard({ category, userPicks, onPick, aggregates, locked, winner }) {
   const willWin = userPicks?.[category.id]?.will_win;
   const shouldWin = userPicks?.[category.id]?.should_win;
   return (
-    <div className="category-card" id={`cat-${category.id}`}>
-      <h3 className="category-name">{category.name}</h3>
+    <div className={`category-card ${locked ? "category-locked" : ""}`} id={`cat-${category.id}`}>
+      <h3 className="category-name">
+        {category.name}
+        {locked && !winner && <span className="lock-icon">🔒</span>}
+      </h3>
       <div className="pick-headers">
         <span className="pick-label will-label">Will Win ★</span>
         <span className="pick-label should-label">Should Win ♥</span>
@@ -371,19 +466,29 @@ function CategoryCard({ category, userPicks, onPick, aggregates }) {
         {category.nominees.map(nominee => {
           const isWillWin = willWin === nominee;
           const isShouldWin = shouldWin === nominee;
+          const isWinner = winner === nominee;
           const pct = aggregates?.[category.id]?.[nominee];
           return (
-            <div key={nominee} className={`nominee-row ${isWillWin || isShouldWin ? "picked" : ""}`}>
+            <div key={nominee} className={`nominee-row ${isWillWin || isShouldWin ? "picked" : ""} ${isWinner ? "nominee-winner" : ""}`}>
               <div className="nominee-name">
+                {isWinner && <span className="winner-trophy">★ </span>}
                 {nominee}
-                {pct?.will_win_pct > 0 && <span className="agg-badge will-agg">{Math.round(pct.will_win_pct)}%</span>}
-                {pct?.should_win_pct > 0 && <span className="agg-badge should-agg">{Math.round(pct.should_win_pct)}%</span>}
+                {!isWinner && pct?.will_win_pct > 0 && <span className="agg-badge will-agg">{Math.round(pct.will_win_pct)}%</span>}
+                {!isWinner && pct?.should_win_pct > 0 && <span className="agg-badge should-agg">{Math.round(pct.should_win_pct)}%</span>}
               </div>
               <div className="nominee-picks">
-                <button className={`pick-btn will-btn ${isWillWin ? "selected" : ""}`} onClick={() => onPick(category.id, "will_win", isWillWin ? null : nominee)}>
+                <button
+                  className={`pick-btn will-btn ${isWillWin ? "selected" : ""}`}
+                  onClick={() => !locked && onPick(category.id, "will_win", isWillWin ? null : nominee)}
+                  disabled={locked}
+                >
                   {isWillWin ? "★" : "☆"}
                 </button>
-                <button className={`pick-btn should-btn ${isShouldWin ? "selected" : ""}`} onClick={() => onPick(category.id, "should_win", isShouldWin ? null : nominee)}>
+                <button
+                  className={`pick-btn should-btn ${isShouldWin ? "selected" : ""}`}
+                  onClick={() => !locked && onPick(category.id, "should_win", isShouldWin ? null : nominee)}
+                  disabled={locked}
+                >
                   {isShouldWin ? "♥" : "♡"}
                 </button>
               </div>
@@ -895,6 +1000,226 @@ function Leagues({ currentUserId, show, allProfiles }) {
 }
 
 // ============================================================
+// RESULTS MODAL
+// ============================================================
+function ResultsModal({ show, picks, winners, user, onClose }) {
+  const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "Friend";
+  const categories = show.categories;
+
+  const willCorrect = categories.filter(c => winners[c.id] && picks[c.id]?.will_win === winners[c.id]).length;
+  const shouldCorrect = categories.filter(c => winners[c.id] && picks[c.id]?.should_win === winners[c.id]).length;
+  const totalWithWinners = categories.filter(c => winners[c.id]).length;
+
+  // Top 3 correct will-win picks for highlights
+  const highlights = categories
+    .filter(c => winners[c.id] && picks[c.id]?.will_win === winners[c.id])
+    .slice(0, 3);
+
+  const [showCard, setShowCard] = useState(false);
+
+  return (
+    <div className="results-modal-backdrop" onClick={onClose}>
+      <div className="results-modal" onClick={e => e.stopPropagation()}>
+        {showCard ? (
+          <BallotCard
+            show={show}
+            displayName={displayName}
+            willCorrect={willCorrect}
+            shouldCorrect={shouldCorrect}
+            totalWithWinners={totalWithWinners}
+            highlights={highlights}
+            onBack={() => setShowCard(false)}
+            onClose={onClose}
+          />
+        ) : (
+          <>
+            <div className="results-modal-header">
+              <p className="results-modal-eyebrow">The results are in</p>
+              <h2 className="results-modal-title">{show.name}</h2>
+            </div>
+
+            <div className="results-scores">
+              <div className="results-score-box">
+                <span className="results-score-num" style={{ color: "var(--gold)" }}>{willCorrect}</span>
+                <span className="results-score-den">/{totalWithWinners}</span>
+                <span className="results-score-label">★ Will Win</span>
+              </div>
+              <div className="results-score-divider" />
+              <div className="results-score-box">
+                <span className="results-score-num" style={{ color: "var(--crimson)" }}>{shouldCorrect}</span>
+                <span className="results-score-den">/{totalWithWinners}</span>
+                <span className="results-score-label">♥ Should Win</span>
+              </div>
+            </div>
+
+            {highlights.length > 0 && (
+              <div className="results-highlights">
+                <p className="results-highlights-label">You called it ✓</p>
+                {highlights.map(cat => (
+                  <div key={cat.id} className="results-highlight-row">
+                    <span className="results-highlight-cat">{cat.name}</span>
+                    <span className="results-highlight-pick">{winners[cat.id]}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="results-modal-actions">
+              <button className="results-card-btn" onClick={() => setShowCard(true)}>
+                Share my ballot ✦
+              </button>
+              <button className="results-close-btn" onClick={onClose}>
+                View full results
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// BALLOT CARD (shareable summary image)
+// ============================================================
+function BallotCard({ show, displayName, willCorrect, shouldCorrect, totalWithWinners, highlights, onBack, onClose }) {
+  const canvasRef = useRef(null);
+  const [generated, setGenerated] = useState(false);
+
+  useEffect(() => { generateCard(); }, []);
+
+  const generateCard = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const W = 600, H = 420;
+    canvas.width = W; canvas.height = H;
+
+    // Background
+    ctx.fillStyle = "#0f1220";
+    ctx.fillRect(0, 0, W, H);
+
+    // Gold border
+    ctx.strokeStyle = "#c9a84c";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(16, 16, W - 32, H - 32);
+
+    // Inner subtle border
+    ctx.strokeStyle = "#1e2540";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(22, 22, W - 44, H - 44);
+
+    // Star + heart decorations (top corners)
+    ctx.font = "bold 22px serif";
+    ctx.fillStyle = "#c9a84c";
+    ctx.fillText("★", 36, 56);
+    ctx.fillStyle = "#c94c5e";
+    ctx.fillText("♥", W - 56, 56);
+
+    // Show name
+    ctx.font = "bold 15px 'DM Mono', monospace";
+    ctx.fillStyle = "#555d78";
+    ctx.textAlign = "center";
+    ctx.fillText(show.name.toUpperCase(), W / 2, 52);
+
+    // Display name
+    ctx.font = "bold 32px Georgia, serif";
+    ctx.fillStyle = "#f0f0f5";
+    ctx.fillText(displayName, W / 2, 105);
+
+    // Divider
+    ctx.strokeStyle = "#2a3050";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(60, 124); ctx.lineTo(W - 60, 124);
+    ctx.stroke();
+
+    // Scores
+    const scoreY = 185;
+    // Will Win
+    ctx.font = "bold 56px Georgia, serif";
+    ctx.fillStyle = "#c9a84c";
+    ctx.textAlign = "center";
+    ctx.fillText(willCorrect, W / 4, scoreY);
+    ctx.font = "14px 'DM Mono', monospace";
+    ctx.fillStyle = "#555d78";
+    ctx.fillText(`/ ${totalWithWinners}`, W / 4, scoreY + 22);
+    ctx.fillText("★ WILL WIN", W / 4, scoreY + 44);
+
+    // Divider between scores
+    ctx.strokeStyle = "#2a3050";
+    ctx.beginPath();
+    ctx.moveTo(W / 2, scoreY - 48); ctx.lineTo(W / 2, scoreY + 48);
+    ctx.stroke();
+
+    // Should Win
+    ctx.font = "bold 56px Georgia, serif";
+    ctx.fillStyle = "#c94c5e";
+    ctx.fillText(shouldCorrect, (W * 3) / 4, scoreY);
+    ctx.font = "14px 'DM Mono', monospace";
+    ctx.fillStyle = "#555d78";
+    ctx.fillText(`/ ${totalWithWinners}`, (W * 3) / 4, scoreY + 22);
+    ctx.fillText("♥ SHOULD WIN", (W * 3) / 4, scoreY + 44);
+
+    // Divider
+    ctx.strokeStyle = "#2a3050";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(60, scoreY + 66); ctx.lineTo(W - 60, scoreY + 66);
+    ctx.stroke();
+
+    // Highlights
+    if (highlights.length > 0) {
+      ctx.font = "11px 'DM Mono', monospace";
+      ctx.fillStyle = "#555d78";
+      ctx.textAlign = "left";
+      ctx.fillText("CALLED IT:", 60, scoreY + 92);
+      highlights.forEach((cat, i) => {
+        const y = scoreY + 112 + i * 22;
+        ctx.fillStyle = "#c9a84c";
+        ctx.fillText("✓", 60, y);
+        ctx.fillStyle = "#8890a8";
+        ctx.fillText(`${cat.name}  ·  ${show.categories.find(c => c.id === cat.id) ? show.categories.find(c => c.id === cat.id).nominees[0] : ""}`, 80, y);
+      });
+    }
+
+    // Footer
+    ctx.font = "11px 'DM Mono', monospace";
+    ctx.fillStyle = "#555d78";
+    ctx.textAlign = "center";
+    ctx.fillText("willwinshouldwin.com", W / 2, H - 30);
+
+    setGenerated(true);
+  };
+
+  const download = () => {
+    const canvas = canvasRef.current;
+    const link = document.createElement("a");
+    link.download = `my-ballot-${show.id}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      <button className="back-btn" onClick={onBack}>← Back</button>
+      <canvas ref={canvasRef} style={{ width: "100%", borderRadius: "8px", border: "1px solid var(--border)" }} />
+      <div style={{ display: "flex", gap: "0.75rem" }}>
+        <button className="results-card-btn" style={{ flex: 1 }} onClick={download}>
+          Download image
+        </button>
+        <button className="results-close-btn" style={{ flex: 1 }} onClick={onClose}>
+          Done
+        </button>
+      </div>
+      <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textAlign: "center" }}>
+        Screenshot or download to share on social media
+      </p>
+    </div>
+  );
+}
+
+// ============================================================
 // COLOR THEMES
 // ============================================================
 const COLOR_THEMES = [
@@ -983,6 +1308,8 @@ function Profile({ user, picks, show }) {
       return {
         id: s.id, name: s.name, shortName: s.short_name,
         year: s.year, date: s.date, status: s.status,
+        ballots_open: s.ballots_open !== false,
+        results_published: s.results_published === true,
         categories: (cats || []).map(c => ({ id: c.id, name: c.name, nominees: c.nominees })),
       };
     }));
@@ -1486,9 +1813,9 @@ function AddShowForm({ onSaved, allShows }) {
 function ManageShows({ dbShows, onRefresh }) {
   const [saving, setSaving] = useState(null);
 
-  const updateStatus = async (showId, status) => {
+  const updateShow = async (showId, fields) => {
     setSaving(showId);
-    await supabase.from("db_shows").update({ status }).eq("id", showId);
+    await supabase.from("db_shows").update(fields).eq("id", showId);
     setSaving(null);
     onRefresh();
   };
@@ -1503,18 +1830,56 @@ function ManageShows({ dbShows, onRefresh }) {
             <span className="manage-show-name">{show.name}</span>
             <span className="manage-show-date">{show.date}</span>
           </div>
-          <select
-            className="admin-select manage-show-select"
-            value={show.status}
-            onChange={e => updateStatus(show.id, e.target.value)}
-            disabled={saving === show.id}
-          >
-            <option value="upcoming">Upcoming</option>
-            <option value="active">Active</option>
-            <option value="completed">Completed</option>
-          </select>
+
+          <div className="manage-show-controls">
+            {/* Status */}
+            <div className="manage-control-group">
+              <label className="manage-control-label">Status</label>
+              <select
+                className="admin-select manage-show-select"
+                value={show.status}
+                onChange={e => updateShow(show.id, { status: e.target.value })}
+                disabled={saving === show.id}
+              >
+                <option value="upcoming">Upcoming</option>
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+
+            {/* Ballots open toggle */}
+            <div className="manage-control-group">
+              <label className="manage-control-label">Ballots</label>
+              <button
+                className={`lifecycle-toggle ${show.ballots_open !== false ? "toggle-on" : "toggle-off"}`}
+                onClick={() => updateShow(show.id, { ballots_open: !show.ballots_open === false ? false : true, ballots_open: show.ballots_open === false ? true : false })}
+                disabled={saving === show.id}
+              >
+                {show.ballots_open !== false ? "Open ✓" : "Closed ✗"}
+              </button>
+            </div>
+
+            {/* Results published toggle */}
+            <div className="manage-control-group">
+              <label className="manage-control-label">Results</label>
+              <button
+                className={`lifecycle-toggle ${show.results_published ? "toggle-on" : "toggle-off"}`}
+                onClick={() => updateShow(show.id, { results_published: !show.results_published })}
+                disabled={saving === show.id}
+              >
+                {show.results_published ? "Published ✓" : "Hidden ✗"}
+              </button>
+            </div>
+          </div>
         </div>
       ))}
+
+      <div className="lifecycle-guide">
+        <p className="lifecycle-guide-title">Show lifecycle</p>
+        <p><strong>Ballots Open</strong> — users can make and edit picks</p>
+        <p><strong>Ballots Closed</strong> — picks are locked; ceremony is underway</p>
+        <p><strong>Results Published</strong> — winners are revealed; results modal appears for all users</p>
+      </div>
     </div>
   );
 }
@@ -1549,6 +1914,8 @@ function AdminPanel({ onBack }) {
       return {
         id: s.id, name: s.name, shortName: s.short_name, org: s.org,
         year: s.year, date: s.date, status: s.status,
+        ballots_open: s.ballots_open !== false,
+        results_published: s.results_published === true,
         categories: (cats || []).map(c => ({ id: c.id, name: c.name, nominees: c.nominees })),
       };
     }));
@@ -1749,6 +2116,8 @@ export default function App() {
       return {
         id: s.id, name: s.name, shortName: s.short_name, org: s.org,
         year: s.year, date: s.date, status: s.status,
+        ballots_open: s.ballots_open !== false,
+        results_published: s.results_published === true,
         categories: (cats || []).map(c => ({ id: c.id, name: c.name, nominees: c.nominees })),
       };
     }));
