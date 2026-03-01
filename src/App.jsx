@@ -1234,159 +1234,200 @@ function PicksExportCard({ show, picks, winners, displayName, willColor, shouldC
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
 
-    // Layout constants
-    const W = 720;
-    const COL_COUNT = 2;
-    const HEADER_H = 130;
-    const ROW_H = 52;
-    const FOOTER_H = 52;
-    const PADDING = 28;
-    const COL_W = (W - PADDING * 2) / COL_COUNT;
+    // ── Layout (logical px — rendered at 2× for high-res) ──
+    const SCALE = 2;
+    const W = 800;                    // logical width
+    const PADDING = 36;
+    const COL_GAP = 24;               // gap between columns
+    const COL_W = (W - PADDING * 2 - COL_GAP) / 2;
+    const HEADER_H = 148;
+    const ROW_H = 72;                 // stacked: cat label + will + should
+    const FOOTER_H = 64;
     const CAT_COUNT = categories.length;
-    const ROWS_PER_COL = Math.ceil(CAT_COUNT / COL_COUNT);
+    const ROWS_PER_COL = Math.ceil(CAT_COUNT / 2);
     const BODY_H = ROWS_PER_COL * ROW_H;
-    const H = HEADER_H + BODY_H + FOOTER_H + PADDING;
+    const H = HEADER_H + BODY_H + FOOTER_H;
 
-    canvas.width = W;
-    canvas.height = H;
+    // Set canvas at 2× resolution, display at 1×
+    canvas.width  = W * SCALE;
+    canvas.height = H * SCALE;
+    canvas.style.width  = "100%";
+    canvas.style.height = "auto";
+    ctx.scale(SCALE, SCALE);
 
     // ── Background ──
     const bg = ctx.createLinearGradient(0, 0, 0, H);
     bg.addColorStop(0, "#0a0d14");
-    bg.addColorStop(1, "#111520");
+    bg.addColorStop(1, "#10141f");
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
 
-    // Subtle column divider
-    ctx.strokeStyle = "#1e2540";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(W / 2, HEADER_H);
-    ctx.lineTo(W / 2, HEADER_H + BODY_H);
-    ctx.stroke();
-
-    // ── Header ──
-    // Gold top bar
+    // ── Top gradient bar ──
     const barGrad = ctx.createLinearGradient(0, 0, W, 0);
     barGrad.addColorStop(0, willColor);
     barGrad.addColorStop(1, shouldColor);
     ctx.fillStyle = barGrad;
-    ctx.fillRect(0, 0, W, 4);
+    ctx.fillRect(0, 0, W, 5);
 
+    // ── Column divider ──
+    ctx.strokeStyle = "#1e2540";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(W / 2, HEADER_H - 4);
+    ctx.lineTo(W / 2, HEADER_H + BODY_H + 4);
+    ctx.stroke();
+
+    // ── Header ──
     // Show name
-    ctx.font = "600 12px 'Courier New', monospace";
+    ctx.font = "600 11px 'Courier New', monospace";
     ctx.fillStyle = "#555d78";
     ctx.textAlign = "center";
-    ctx.letterSpacing = "3px";
-    ctx.fillText(show.name.toUpperCase(), W / 2, 30);
-    ctx.letterSpacing = "0px";
+    ctx.fillText(show.name.toUpperCase(), W / 2, 34);
 
-    // Display name
-    ctx.font = "bold 34px Georgia, serif";
+    // Display name title
+    ctx.font = "bold 36px Georgia, serif";
     ctx.fillStyle = "#f0f0f5";
-    ctx.fillText(displayName + "'s Ballot", W / 2, 68);
+    ctx.fillText(`${displayName}'s Ballot`, W / 2, 78);
 
-    // Column headers
-    ctx.font = "11px 'Courier New', monospace";
-    ctx.letterSpacing = "1px";
-    const legendY = 100;
-    // Left col header
-    ctx.fillStyle = willColor;
+    // Legend row — one per column
+    const legendY = 108;
+    const legendFont = "10px 'Courier New', monospace";
+    ctx.font = legendFont;
     ctx.textAlign = "left";
-    ctx.fillText("★  WILL WIN", PADDING, legendY);
-    ctx.fillStyle = shouldColor;
-    ctx.fillText("♥  SHOULD WIN", PADDING + 120, legendY);
-    // Right col header
-    ctx.fillStyle = willColor;
-    ctx.textAlign = "left";
-    ctx.fillText("★  WILL WIN", W / 2 + PADDING, legendY);
-    ctx.fillStyle = shouldColor;
-    ctx.fillText("♥  SHOULD WIN", W / 2 + PADDING + 120, legendY);
-    ctx.letterSpacing = "0px";
 
-    // Divider
+    const leftX  = PADDING;
+    const rightX = W / 2 + COL_GAP / 2 + 2;
+
+    for (const colX of [leftX, rightX]) {
+      ctx.fillStyle = willColor;
+      ctx.fillText("★  Will Win", colX, legendY);
+      ctx.fillStyle = shouldColor;
+      ctx.fillText("♥  Should Win", colX + COL_W / 2, legendY);
+    }
+
+    // Header divider
     ctx.strokeStyle = "#2a3050";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(PADDING, HEADER_H - 8);
-    ctx.lineTo(W - PADDING, HEADER_H - 8);
+    ctx.moveTo(PADDING, HEADER_H - 10);
+    ctx.lineTo(W - PADDING, HEADER_H - 10);
     ctx.stroke();
 
     // ── Category rows ──
+    const colXs = [leftX, rightX];
+
     categories.forEach((cat, i) => {
-      const col = i < ROWS_PER_COL ? 0 : 1;
-      const rowIdx = col === 0 ? i : i - ROWS_PER_COL;
-      const x = PADDING + col * (W / 2);
-      const y = HEADER_H + rowIdx * ROW_H;
-      const catW = COL_W - PADDING;
+      const col     = i < ROWS_PER_COL ? 0 : 1;
+      const rowIdx  = col === 0 ? i : i - ROWS_PER_COL;
+      const x       = colXs[col];
+      const y       = HEADER_H + rowIdx * ROW_H;
+      const availW  = COL_W - 8;
+      const halfW   = availW / 2 - 4;
 
-      const userPick = picks[cat.id] || {};
-      const willPick = userPick.will_win;
-      const shouldPick = userPick.should_win;
-      const winner = winners[cat.id];
+      const userPick  = picks[cat.id] || {};
+      const willPick  = userPick.will_win  || null;
+      const shouldPick= userPick.should_win|| null;
+      const winner    = winners[cat.id]    || null;
 
-      // Alternating row background
+      const willCorrect   = winner && willPick   === winner;
+      const shouldCorrect = winner && shouldPick === winner;
+
+      // Alternating row tint
       if (rowIdx % 2 === 0) {
-        ctx.fillStyle = "rgba(255,255,255,0.018)";
+        ctx.fillStyle = "rgba(255,255,255,0.016)";
         ctx.fillRect(col === 0 ? 0 : W / 2, y, W / 2, ROW_H);
       }
 
-      // Winner highlight
-      if (winner && willPick === winner) {
-        ctx.fillStyle = `${willColor}18`;
+      // Correct will-win highlight
+      if (willCorrect) {
+        ctx.fillStyle = willColor + "1a";
         ctx.fillRect(col === 0 ? 0 : W / 2, y, W / 2, ROW_H);
-        ctx.strokeStyle = `${willColor}30`;
+        ctx.strokeStyle = willColor + "33";
         ctx.lineWidth = 1;
-        ctx.strokeRect(col === 0 ? 0 : W / 2, y, W / 2, ROW_H);
+        ctx.strokeRect(col === 0 ? 0.5 : W / 2 + 0.5, y + 0.5, W / 2 - 1, ROW_H - 1);
       }
 
-      // Category name
-      ctx.font = "11px 'Courier New', monospace";
-      ctx.fillStyle = "#555d78";
+      // Category label
+      ctx.font = "10px 'Courier New', monospace";
+      ctx.fillStyle = "#505870";
       ctx.textAlign = "left";
       ctx.fillText(cat.name.toUpperCase(), x, y + 16);
 
-      // Will Win pick
-      ctx.font = "bold 13px Georgia, serif";
-      ctx.fillStyle = willPick
-        ? (winner && willPick === winner ? willColor : willPick ? willColor + "cc" : "#555d78")
-        : "#333a55";
-      const willText = willPick
-        ? (winner && willPick === winner ? "★ " + truncate(willPick, 26) : truncate(willPick, 26))
-        : "★ —";
-      ctx.fillText(willText, x, y + 32);
+      // Row bottom border
+      ctx.strokeStyle = "#1a2035";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(col === 0 ? 0 : W / 2, y + ROW_H);
+      ctx.lineTo(col === 0 ? W / 2 : W, y + ROW_H);
+      ctx.stroke();
 
-      // Should Win pick
-      ctx.fillStyle = shouldPick ? shouldColor + "cc" : "#333a55";
-      const shouldText = shouldPick ? "♥ " + truncate(shouldPick, 24) : "♥ —";
-      ctx.fillText(shouldText, x + catW / 2, y + 32);
+      // ── Will Win pick ──
+      const willX = x;
+      const pickY = y + 38;
+
+      if (willPick) {
+        ctx.font = `${willCorrect ? "bold" : "normal"} 13px Georgia, serif`;
+        ctx.fillStyle = willCorrect ? willColor : willColor + "bb";
+        ctx.textAlign = "left";
+        const prefix = willCorrect ? "★ " : "★ ";
+        ctx.fillText(fitText(ctx, prefix + willPick, halfW), willX, pickY);
+      } else {
+        ctx.font = "12px Georgia, serif";
+        ctx.fillStyle = "#2e3450";
+        ctx.fillText("★  —", willX, pickY);
+      }
+
+      // ── Should Win pick ──
+      const shouldX = x + halfW + 8;
+
+      if (shouldPick) {
+        ctx.font = `${shouldCorrect ? "bold" : "normal"} 13px Georgia, serif`;
+        ctx.fillStyle = shouldCorrect ? shouldColor : shouldColor + "bb";
+        ctx.textAlign = "left";
+        ctx.fillText(fitText(ctx, "♥ " + shouldPick, halfW), shouldX, pickY);
+      } else {
+        ctx.font = "12px Georgia, serif";
+        ctx.fillStyle = "#2e3450";
+        ctx.fillText("♥  —", shouldX, pickY);
+      }
+
+      // Mid-column pick divider
+      ctx.strokeStyle = "#1e2540";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + halfW + 4, y + 24);
+      ctx.lineTo(x + halfW + 4, y + ROW_H - 6);
+      ctx.stroke();
     });
 
     // ── Footer ──
-    const footY = HEADER_H + BODY_H + 20;
+    const footY = HEADER_H + BODY_H;
     ctx.strokeStyle = "#2a3050";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(PADDING, footY - 8);
-    ctx.lineTo(W - PADDING, footY - 8);
+    ctx.moveTo(PADDING, footY + 14);
+    ctx.lineTo(W - PADDING, footY + 14);
     ctx.stroke();
 
-    ctx.textAlign = "center";
-    ctx.font = "11px 'Courier New', monospace";
-    ctx.fillStyle = willColor;
-    ctx.fillText("★", W / 2 - 60, footY + 14);
-    ctx.fillStyle = "#3a4060";
-    ctx.fillText("willwinshouldwin.com", W / 2, footY + 14);
-    ctx.fillStyle = shouldColor;
-    ctx.fillText("♥", W / 2 + 58, footY + 14);
-
-    // Summary score if results are in
     if (resultsMode) {
-      const willCorrect = categories.filter(c => winners[c.id] && picks[c.id]?.will_win === winners[c.id]).length;
+      const willCorrectCount  = categories.filter(c => winners[c.id] && picks[c.id]?.will_win  === winners[c.id]).length;
+      const shouldCorrectCount= categories.filter(c => winners[c.id] && picks[c.id]?.should_win === winners[c.id]).length;
       const total = categories.filter(c => winners[c.id]).length;
+      ctx.font = "bold 13px Georgia, serif";
+      ctx.fillStyle = willColor;
+      ctx.textAlign = "left";
+      ctx.fillText(`★ ${willCorrectCount}/${total}`, PADDING, footY + 38);
+      ctx.fillStyle = shouldColor;
+      ctx.fillText(`♥ ${shouldCorrectCount}/${total}`, PADDING + 80, footY + 38);
       ctx.font = "10px 'Courier New', monospace";
-      ctx.fillStyle = "#555d78";
-      ctx.fillText(`${willCorrect}/${total} correct · ${show.name}`, W / 2, footY + 32);
+      ctx.fillStyle = "#3a4060";
+      ctx.textAlign = "right";
+      ctx.fillText("willwinshouldwin.com", W - PADDING, footY + 38);
+    } else {
+      ctx.font = "10px 'Courier New', monospace";
+      ctx.fillStyle = "#3a4060";
+      ctx.textAlign = "center";
+      ctx.fillText("willwinshouldwin.com", W / 2, footY + 38);
     }
   };
 
@@ -1419,9 +1460,14 @@ function PicksExportCard({ show, picks, winners, displayName, willColor, shouldC
   );
 }
 
-function truncate(str, max) {
-  if (!str) return "";
-  return str.length > max ? str.slice(0, max - 1) + "…" : str;
+// Truncate text to fit within maxWidth using canvas measureText
+function fitText(ctx, text, maxWidth) {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let truncated = text;
+  while (truncated.length > 1 && ctx.measureText(truncated + "…").width > maxWidth) {
+    truncated = truncated.slice(0, -1);
+  }
+  return truncated + "…";
 }
 
 // ============================================================
