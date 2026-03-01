@@ -503,59 +503,152 @@ function CategoryCard({ category, userPicks, onPick, aggregates, locked, winner 
 // ============================================================
 // LEADERBOARD
 // ============================================================
+// ============================================================
+// FOLLOW BUTTON — reusable, manages its own follow state
+// ============================================================
+function FollowButton({ currentUserId, targetId, onFollow }) {
+  const [isFollowing, setIsFollowing] = useState(null);
+  const [working, setWorking] = useState(false);
+
+  useEffect(() => {
+    if (!currentUserId || !targetId || currentUserId === targetId) return;
+    supabase.from("follows")
+      .select("follower_id").eq("follower_id", currentUserId).eq("following_id", targetId)
+      .maybeSingle().then(({ data }) => setIsFollowing(!!data));
+  }, [currentUserId, targetId]);
+
+  if (!currentUserId || currentUserId === targetId) return null;
+  if (isFollowing === null) return <span className="follow-btn-placeholder" />;
+
+  const toggle = async () => {
+    setWorking(true);
+    if (isFollowing) {
+      await supabase.from("follows").delete().eq("follower_id", currentUserId).eq("following_id", targetId);
+      setIsFollowing(false);
+    } else {
+      await supabase.from("follows").insert({ follower_id: currentUserId, following_id: targetId });
+      setIsFollowing(true);
+      onFollow?.();
+    }
+    setWorking(false);
+  };
+
+  return (
+    <button className={`follow-btn ${isFollowing ? "following" : ""}`} onClick={toggle} disabled={working}>
+      {working ? "…" : isFollowing ? "Following ✓" : "+ Follow"}
+    </button>
+  );
+}
+
 function Leaderboard({ currentUserId, show }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [winnersAnnounced, setWinnersAnnounced] = useState(false);
+  const [followingIds, setFollowingIds] = useState(new Set());
+  const [filterMode, setFilterMode] = useState("everyone"); // "everyone" | "friends"
 
   useEffect(() => { loadLeaderboard(); }, [show.id]);
 
   const loadLeaderboard = async () => {
     setLoading(true);
-    const { data: winData } = await supabase.from("winners").select("*").eq("show_id", show.id);
+
+    const [winRes, picksRes, profilesRes, followsRes] = await Promise.all([
+      supabase.from("winners").select("*").eq("show_id", show.id),
+      supabase.from("picks").select("*").eq("show_id", show.id),
+      supabase.from("profiles").select("id, username, accent_color, picks_visibility"),
+      supabase.from("follows").select("following_id").eq("follower_id", currentUserId),
+    ]);
+
     const winMap = {};
-    (winData || []).forEach(w => { winMap[w.category_id] = w.will_win_winner; });
+    (winRes.data || []).forEach(w => { winMap[w.category_id] = w.will_win_winner; });
     setWinnersAnnounced(Object.keys(winMap).length > 0);
 
-    const { data: picks } = await supabase.from("picks").select("*").eq("show_id", show.id);
-    const { data: profiles } = await supabase.from("profiles").select("*");
+    const fIds = new Set((followsRes.data || []).map(r => r.following_id));
+    fIds.add(currentUserId); // always include yourself
+    setFollowingIds(fIds);
+
     const profileMap = {};
-    (profiles || []).forEach(p => profileMap[p.id] = p.display_name || p.email);
+    (profilesRes.data || []).forEach(p => { profileMap[p.id] = p; });
 
     const scoreMap = {};
-    (picks || []).forEach(pick => {
+    (picksRes.data || []).forEach(pick => {
+      const prof = profileMap[pick.user_id];
+      if (!prof) return;
+      // Visibility enforcement
+      const vis = prof.picks_visibility || "public";
+      const isMe = pick.user_id === currentUserId;
+      const isFriend = fIds.has(pick.user_id);
+      if (!isMe && vis === "private") return;
+      if (!isMe && vis === "friends" && !isFriend) return;
+
       if (!scoreMap[pick.user_id]) scoreMap[pick.user_id] = { will_win: 0, should_win: 0 };
       const winner = winMap[pick.category_id];
       if (!winner) return;
-      if (pick.will_win === winner) scoreMap[pick.user_id].will_win++;
+      if (pick.will_win === winner)   scoreMap[pick.user_id].will_win++;
       if (pick.should_win === winner) scoreMap[pick.user_id].should_win++;
     });
 
-    const leaderboard = Object.entries(scoreMap)
-      .map(([uid, scores]) => ({ uid, name: profileMap[uid] || "Anonymous", ...scores, total: scores.will_win + scores.should_win, isYou: uid === currentUserId }))
-      .sort((a, b) => b.total - a.total || b.will_win - a.will_win);
+    const leaderboard = Object.entries(scoreMap).map(([uid, scores]) => {
+      const prof = profileMap[uid] || {};
+      return { uid, name: prof.username || "Anonymous", username: prof.username, accent_color: prof.accent_color, ...scores, total: scores.will_win + scores.should_win, isYou: uid === currentUserId };
+    }).sort((a, b) => b.total - a.total || b.will_win - a.will_win);
+
     setEntries(leaderboard);
     setLoading(false);
   };
 
   if (loading) return <div className="app-main"><div className="loading">Loading…</div></div>;
 
+  const displayed = filterMode === "friends"
+    ? entries.filter(e => followingIds.has(e.uid))
+    : entries;
+
   return (
     <div className="app-main">
-      <h2 className="section-title">Leaderboard</h2>
+      <div className="lb-top-row">
+        <h2 className="section-title" style={{ margin: 0 }}>Leaderboard</h2>
+        <div className="lb-filter-tabs">
+          <button className={`lb-filter-btn ${filterMode === "everyone" ? "active" : ""}`} onClick={() => setFilterMode("everyone")}>Everyone</button>
+          <button className={`lb-filter-btn ${filterMode === "friends"  ? "active" : ""}`} onClick={() => setFilterMode("friends")}>Friends</button>
+        </div>
+      </div>
       {!winnersAnnounced && <p className="leaderboard-note">Scores populate after the ceremony on {show.date}. Make your picks now!</p>}
-      {entries.length === 0 && <p className="leaderboard-note">No picks yet — be the first!</p>}
+      {displayed.length === 0 && (
+        <p className="leaderboard-note">
+          {filterMode === "friends" ? "Follow people to see them here." : "No picks yet — be the first!"}
+        </p>
+      )}
       <div className="leaderboard">
-        <div className="lb-header"><span>Rank</span><span>Name</span><span>★</span><span>♥</span><span>Total</span></div>
-        {entries.map((entry, i) => (
-          <div key={entry.uid} className={`lb-row ${entry.isYou ? "lb-you" : ""}`}>
-            <span className="lb-rank">#{i + 1}</span>
-            <span className="lb-name">{entry.name} {entry.isYou && <em>(you)</em>}</span>
-            <span className="lb-score">{entry.will_win}</span>
-            <span className="lb-score">{entry.should_win}</span>
-            <span className="lb-total">{entry.total}</span>
-          </div>
-        ))}
+        <div className="lb-header"><span>Rank</span><span>Name</span><span>★</span><span>♥</span><span>Total</span><span /></div>
+        {displayed.map((entry, i) => {
+          const theme = COLOR_THEMES.find(t => t.id === entry.accent_color) || COLOR_THEMES[0];
+          return (
+            <div key={entry.uid} className={`lb-row ${entry.isYou ? "lb-you" : ""}`}>
+              <span className="lb-rank">#{i + 1}</span>
+              <span className="lb-name">
+                {entry.username ? (
+                  <a href={`/?u=${entry.username}`} target="_blank" rel="noreferrer" className="lb-name-link"
+                     style={{ "--lb-color": theme.will }}>
+                    {entry.name}
+                  </a>
+                ) : entry.name}
+                {entry.isYou && <em> (you)</em>}
+              </span>
+              <span className="lb-score">{entry.will_win}</span>
+              <span className="lb-score">{entry.should_win}</span>
+              <span className="lb-total">{entry.total}</span>
+              <span className="lb-follow">
+                {!entry.isYou && (
+                  <FollowButton
+                    currentUserId={currentUserId}
+                    targetId={entry.uid}
+                    onFollow={() => setFollowingIds(prev => new Set([...prev, entry.uid]))}
+                  />
+                )}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1561,6 +1654,10 @@ function Profile({ user, picks, show }) {
   const [usernameError, setUsernameError] = useState("");
   const [savingUsername, setSavingUsername] = useState(false);
   const [usernameSaved, setUsernameSaved] = useState(false);
+  const [visibility, setVisibility] = useState("public");
+  const [following, setFollowing] = useState([]);   // [{ id, username, display_name, accent_color }]
+  const [followers, setFollowers] = useState([]);   // [{ id, username, display_name, accent_color }]
+  const [profileTab, setProfileTab] = useState("ballots"); // "ballots" | "friends"
   const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "Friend";
 
   const memberSince = user.created_at
@@ -1612,13 +1709,49 @@ function Profile({ user, picks, show }) {
 
   const loadProfile = async () => {
     const { data } = await supabase.from("profiles")
-      .select("accent_color, favorite_movie, favorite_movie_poster, username")
+      .select("accent_color, favorite_movie, favorite_movie_poster, username, picks_visibility")
       .eq("id", user.id).single();
     if (data) {
       setProfileData(data);
       applyTheme(data.accent_color || "gold");
       if (data.username) { setUsername(data.username); setUsernameDraft(data.username); }
+      if (data.picks_visibility) setVisibility(data.picks_visibility);
     }
+    loadFollows();
+  };
+
+  const loadFollows = async () => {
+    // Who I follow
+    const { data: fwing } = await supabase
+      .from("follows").select("following_id").eq("follower_id", user.id);
+    const followingIds = (fwing || []).map(r => r.following_id);
+
+    // Who follows me
+    const { data: fwers } = await supabase
+      .from("follows").select("follower_id").eq("following_id", user.id);
+    const followerIds = (fwers || []).map(r => r.follower_id);
+
+    // Fetch profiles for both sets
+    const allIds = [...new Set([...followingIds, ...followerIds])];
+    if (allIds.length === 0) { setFollowing([]); setFollowers([]); return; }
+
+    const { data: profs } = await supabase
+      .from("profiles").select("id, username, accent_color").in("id", allIds);
+    const profMap = {};
+    (profs || []).forEach(p => profMap[p.id] = p);
+
+    setFollowing(followingIds.map(id => profMap[id]).filter(Boolean));
+    setFollowers(followerIds.map(id => profMap[id]).filter(Boolean));
+  };
+
+  const saveVisibility = async (val) => {
+    setVisibility(val);
+    await supabase.from("profiles").update({ picks_visibility: val }).eq("id", user.id);
+  };
+
+  const unfollow = async (targetId) => {
+    await supabase.from("follows").delete().eq("follower_id", user.id).eq("following_id", targetId);
+    setFollowing(prev => prev.filter(f => f.id !== targetId));
   };
 
   const handleThemeChange = async (themeId) => {
@@ -1739,7 +1872,81 @@ function Profile({ user, picks, show }) {
           )}
         </div>
 
-        {/* ── Ballots across all shows ── */}
+        {/* ── Tab bar ── */}
+        <div className="profile-tabs">
+          <button className={`profile-tab ${profileTab === "ballots" ? "active" : ""}`} onClick={() => setProfileTab("ballots")}>My Ballots</button>
+          <button className={`profile-tab ${profileTab === "friends" ? "active" : ""}`} onClick={() => setProfileTab("friends")}>
+            Friends
+            {(following.length + followers.length) > 0 && (
+              <span className="profile-tab-badge">{following.length}</span>
+            )}
+          </button>
+        </div>
+
+        {/* ── Friends tab ── */}
+        {profileTab === "friends" && (
+          <div className="friends-section">
+            {/* Following */}
+            <p className="profile-section-label">Following ({following.length})</p>
+            {following.length === 0 ? (
+              <p className="friends-empty">You're not following anyone yet. Follow people from the Leaderboard or their public profile.</p>
+            ) : (
+              <div className="friends-list">
+                {following.map(f => {
+                  const theme = COLOR_THEMES.find(t => t.id === f.accent_color) || COLOR_THEMES[0];
+                  return (
+                    <div key={f.id} className="friend-row">
+                      <div className="friend-avatar" style={{ background: `linear-gradient(135deg, ${theme.will}, ${theme.should})` }}>
+                        {(f.username || "?")[0].toUpperCase()}
+                      </div>
+                      <span className="friend-name">{f.username || "Anonymous"}</span>
+                      <div className="friend-actions">
+                        {f.username && (
+                          <a className="friend-profile-link" href={`/?u=${f.username}`} target="_blank" rel="noreferrer">Profile ↗</a>
+                        )}
+                        <button className="unfollow-btn" onClick={() => unfollow(f.id)}>Unfollow</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Followers */}
+            <p className="profile-section-label" style={{ marginTop: "1.5rem" }}>Followers ({followers.length})</p>
+            {followers.length === 0 ? (
+              <p className="friends-empty">No followers yet — share your profile link to get started.</p>
+            ) : (
+              <div className="friends-list">
+                {followers.map(f => {
+                  const theme = COLOR_THEMES.find(t => t.id === f.accent_color) || COLOR_THEMES[0];
+                  const isFollowingBack = following.some(fw => fw.id === f.id);
+                  return (
+                    <div key={f.id} className="friend-row">
+                      <div className="friend-avatar" style={{ background: `linear-gradient(135deg, ${theme.will}, ${theme.should})` }}>
+                        {(f.username || "?")[0].toUpperCase()}
+                      </div>
+                      <span className="friend-name">{f.username || "Anonymous"}</span>
+                      <div className="friend-actions">
+                        {f.username && (
+                          <a className="friend-profile-link" href={`/?u=${f.username}`} target="_blank" rel="noreferrer">Profile ↗</a>
+                        )}
+                        {isFollowingBack ? (
+                          <button className="unfollow-btn" onClick={() => unfollow(f.id)}>Unfollow</button>
+                        ) : (
+                          <FollowButton currentUserId={user.id} targetId={f.id} onFollow={() => loadFollows()} />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Ballots tab ── */}
+        {profileTab === "ballots" && (
         <div className="profile-all-shows">
           <p className="profile-section-label">My Ballots</p>
           {showStats.length === 0 && (
@@ -1796,6 +2003,7 @@ function Profile({ user, picks, show }) {
             );
           })}
         </div>
+        )} {/* end ballots tab */}
 
         {/* ── Customization (collapsible) ── */}
         <div className="profile-customization">
@@ -1832,6 +2040,28 @@ function Profile({ user, picks, show }) {
                     </a>
                   </p>
                 )}
+              </div>
+              {/* Picks visibility */}
+              <div className="username-section">
+                <p className="theme-label">Who can see your picks</p>
+                <p className="username-hint">Controls whether your ballot appears on your public profile and in others' Community views.</p>
+                <div className="visibility-options">
+                  {[
+                    { val: "public",  icon: "🌐", label: "Public",       desc: "Anyone can see your picks" },
+                    { val: "friends", icon: "👥", label: "Friends only",  desc: "Only people you follow back" },
+                    { val: "private", icon: "🔒", label: "Private",       desc: "Only you can see your picks" },
+                  ].map(opt => (
+                    <button
+                      key={opt.val}
+                      className={`visibility-btn ${visibility === opt.val ? "selected" : ""}`}
+                      onClick={() => saveVisibility(opt.val)}
+                    >
+                      <span className="vis-icon">{opt.icon}</span>
+                      <span className="vis-label">{opt.label}</span>
+                      <span className="vis-desc">{opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
               {/* Color theme */}
               <div className="theme-section">
@@ -2435,12 +2665,26 @@ function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, on
     // Load profile
     const { data: prof } = await supabase
       .from("profiles")
-      .select("id, accent_color, favorite_movie, favorite_movie_poster, username")
+      .select("id, accent_color, favorite_movie, favorite_movie_poster, username, picks_visibility")
       .eq("id", targetUserId)
       .single();
 
     if (!prof) { setNotFound(true); setLoading(false); return; }
-    setProfileData(prof);
+
+    // Check if viewer is a mutual friend (for friends-only visibility)
+    let viewerIsFollowing = false;
+    if (currentUser && currentUser.id !== targetUserId) {
+      const { data: followCheck } = await supabase
+        .from("follows").select("follower_id")
+        .eq("follower_id", currentUser.id).eq("following_id", targetUserId).maybeSingle();
+      viewerIsFollowing = !!followCheck;
+    }
+
+    const vis = prof.picks_visibility || "public";
+    const isOwner = currentUser?.id === targetUserId;
+    const canSeePicks = isOwner || vis === "public" || (vis === "friends" && viewerIsFollowing);
+
+    setProfileData({ ...prof, canSeePicks });
     const t = COLOR_THEMES.find(c => c.id === prof.accent_color) || COLOR_THEMES[0];
     setTheme(t);
     applyTheme(t.id);
@@ -2573,10 +2817,21 @@ function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, on
           <div className="public-share-row">
             <span className="compare-link-text">{profileUrl}</span>
             <button className="copy-link-btn" onClick={copyLink}>{copied ? "Copied!" : "Copy"}</button>
+            {currentUser && currentUser.id !== targetUserId && (
+              <FollowButton currentUserId={currentUser.id} targetId={targetUserId} />
+            )}
           </div>
 
           {/* Show ballots */}
-          {showStats.length === 0 ? (
+          {!profileData.canSeePicks ? (
+            <div className="public-no-picks visibility-blocked">
+              <span className="vis-blocked-icon">🔒</span>
+              <p>{displayName}'s picks are {profileData.picks_visibility === "friends" ? "visible to friends only" : "private"}.</p>
+              {profileData.picks_visibility === "friends" && currentUser && (
+                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Follow them and ask them to follow back to see their picks.</p>
+              )}
+            </div>
+          ) : showStats.length === 0 ? (
             <div className="public-no-picks">
               <p>{displayName} hasn't made any picks yet.</p>
             </div>
