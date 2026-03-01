@@ -1220,6 +1220,211 @@ function BallotCard({ show, displayName, willCorrect, shouldCorrect, totalWithWi
 }
 
 // ============================================================
+// PICKS EXPORT CARD — full ballot image for social sharing
+// ============================================================
+function PicksExportCard({ show, picks, winners, displayName, willColor, shouldColor, onClose }) {
+  const canvasRef = useRef(null);
+  const categories = show.categories;
+  const resultsMode = Object.keys(winners).length > 0;
+
+  useEffect(() => { generate(); }, []);
+
+  const generate = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+
+    // Layout constants
+    const W = 720;
+    const COL_COUNT = 2;
+    const HEADER_H = 130;
+    const ROW_H = 52;
+    const FOOTER_H = 52;
+    const PADDING = 28;
+    const COL_W = (W - PADDING * 2) / COL_COUNT;
+    const CAT_COUNT = categories.length;
+    const ROWS_PER_COL = Math.ceil(CAT_COUNT / COL_COUNT);
+    const BODY_H = ROWS_PER_COL * ROW_H;
+    const H = HEADER_H + BODY_H + FOOTER_H + PADDING;
+
+    canvas.width = W;
+    canvas.height = H;
+
+    // ── Background ──
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, "#0a0d14");
+    bg.addColorStop(1, "#111520");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle column divider
+    ctx.strokeStyle = "#1e2540";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(W / 2, HEADER_H);
+    ctx.lineTo(W / 2, HEADER_H + BODY_H);
+    ctx.stroke();
+
+    // ── Header ──
+    // Gold top bar
+    const barGrad = ctx.createLinearGradient(0, 0, W, 0);
+    barGrad.addColorStop(0, willColor);
+    barGrad.addColorStop(1, shouldColor);
+    ctx.fillStyle = barGrad;
+    ctx.fillRect(0, 0, W, 4);
+
+    // Show name
+    ctx.font = "600 12px 'Courier New', monospace";
+    ctx.fillStyle = "#555d78";
+    ctx.textAlign = "center";
+    ctx.letterSpacing = "3px";
+    ctx.fillText(show.name.toUpperCase(), W / 2, 30);
+    ctx.letterSpacing = "0px";
+
+    // Display name
+    ctx.font = "bold 34px Georgia, serif";
+    ctx.fillStyle = "#f0f0f5";
+    ctx.fillText(displayName + "'s Ballot", W / 2, 68);
+
+    // Column headers
+    ctx.font = "11px 'Courier New', monospace";
+    ctx.letterSpacing = "1px";
+    const legendY = 100;
+    // Left col header
+    ctx.fillStyle = willColor;
+    ctx.textAlign = "left";
+    ctx.fillText("★  WILL WIN", PADDING, legendY);
+    ctx.fillStyle = shouldColor;
+    ctx.fillText("♥  SHOULD WIN", PADDING + 120, legendY);
+    // Right col header
+    ctx.fillStyle = willColor;
+    ctx.textAlign = "left";
+    ctx.fillText("★  WILL WIN", W / 2 + PADDING, legendY);
+    ctx.fillStyle = shouldColor;
+    ctx.fillText("♥  SHOULD WIN", W / 2 + PADDING + 120, legendY);
+    ctx.letterSpacing = "0px";
+
+    // Divider
+    ctx.strokeStyle = "#2a3050";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(PADDING, HEADER_H - 8);
+    ctx.lineTo(W - PADDING, HEADER_H - 8);
+    ctx.stroke();
+
+    // ── Category rows ──
+    categories.forEach((cat, i) => {
+      const col = i < ROWS_PER_COL ? 0 : 1;
+      const rowIdx = col === 0 ? i : i - ROWS_PER_COL;
+      const x = PADDING + col * (W / 2);
+      const y = HEADER_H + rowIdx * ROW_H;
+      const catW = COL_W - PADDING;
+
+      const userPick = picks[cat.id] || {};
+      const willPick = userPick.will_win;
+      const shouldPick = userPick.should_win;
+      const winner = winners[cat.id];
+
+      // Alternating row background
+      if (rowIdx % 2 === 0) {
+        ctx.fillStyle = "rgba(255,255,255,0.018)";
+        ctx.fillRect(col === 0 ? 0 : W / 2, y, W / 2, ROW_H);
+      }
+
+      // Winner highlight
+      if (winner && willPick === winner) {
+        ctx.fillStyle = `${willColor}18`;
+        ctx.fillRect(col === 0 ? 0 : W / 2, y, W / 2, ROW_H);
+        ctx.strokeStyle = `${willColor}30`;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(col === 0 ? 0 : W / 2, y, W / 2, ROW_H);
+      }
+
+      // Category name
+      ctx.font = "11px 'Courier New', monospace";
+      ctx.fillStyle = "#555d78";
+      ctx.textAlign = "left";
+      ctx.fillText(cat.name.toUpperCase(), x, y + 16);
+
+      // Will Win pick
+      ctx.font = "bold 13px Georgia, serif";
+      ctx.fillStyle = willPick
+        ? (winner && willPick === winner ? willColor : willPick ? willColor + "cc" : "#555d78")
+        : "#333a55";
+      const willText = willPick
+        ? (winner && willPick === winner ? "★ " + truncate(willPick, 26) : truncate(willPick, 26))
+        : "★ —";
+      ctx.fillText(willText, x, y + 32);
+
+      // Should Win pick
+      ctx.fillStyle = shouldPick ? shouldColor + "cc" : "#333a55";
+      const shouldText = shouldPick ? "♥ " + truncate(shouldPick, 24) : "♥ —";
+      ctx.fillText(shouldText, x + catW / 2, y + 32);
+    });
+
+    // ── Footer ──
+    const footY = HEADER_H + BODY_H + 20;
+    ctx.strokeStyle = "#2a3050";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(PADDING, footY - 8);
+    ctx.lineTo(W - PADDING, footY - 8);
+    ctx.stroke();
+
+    ctx.textAlign = "center";
+    ctx.font = "11px 'Courier New', monospace";
+    ctx.fillStyle = willColor;
+    ctx.fillText("★", W / 2 - 60, footY + 14);
+    ctx.fillStyle = "#3a4060";
+    ctx.fillText("willwinshouldwin.com", W / 2, footY + 14);
+    ctx.fillStyle = shouldColor;
+    ctx.fillText("♥", W / 2 + 58, footY + 14);
+
+    // Summary score if results are in
+    if (resultsMode) {
+      const willCorrect = categories.filter(c => winners[c.id] && picks[c.id]?.will_win === winners[c.id]).length;
+      const total = categories.filter(c => winners[c.id]).length;
+      ctx.font = "10px 'Courier New', monospace";
+      ctx.fillStyle = "#555d78";
+      ctx.fillText(`${willCorrect}/${total} correct · ${show.name}`, W / 2, footY + 32);
+    }
+  };
+
+  const download = () => {
+    const canvas = canvasRef.current;
+    const a = document.createElement("a");
+    a.download = `${displayName.replace(/\s+/g, "-").toLowerCase()}-ballot.png`;
+    a.href = canvas.toDataURL("image/png");
+    a.click();
+  };
+
+  return (
+    <div className="export-card-wrap">
+      <canvas
+        ref={canvasRef}
+        style={{ width: "100%", borderRadius: "8px", border: "1px solid var(--border)", display: "block" }}
+      />
+      <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.75rem" }}>
+        <button className="results-card-btn" style={{ flex: 1 }} onClick={download}>
+          Download image
+        </button>
+        <button className="results-close-btn" style={{ flex: 1 }} onClick={onClose}>
+          Done
+        </button>
+      </div>
+      <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textAlign: "center", marginTop: "0.4rem" }}>
+        Screenshot or download to share
+      </p>
+    </div>
+  );
+}
+
+function truncate(str, max) {
+  if (!str) return "";
+  return str.length > max ? str.slice(0, max - 1) + "…" : str;
+}
+
+// ============================================================
 // COLOR THEMES
 // ============================================================
 const COLOR_THEMES = [
@@ -1268,6 +1473,7 @@ function Profile({ user, picks, show }) {
   const [savingProfile, setSavingProfile] = useState(false);
   const [posterSearch, setPosterSearch] = useState(null); // { loading, results: [{title, year, poster, imdbID}] }
   const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [exportingShow, setExportingShow] = useState(null);
   const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "Friend";
 
   const memberSince = user.created_at
@@ -1436,11 +1642,26 @@ function Profile({ user, picks, show }) {
           {showStats.map(({ show: s, total, willPicked, shouldPicked, bothPicked }) => {
             const pct = total > 0 ? Math.round((bothPicked / total) * 100) : 0;
             const isCurrentShow = s.id === show.id;
+            const isExporting = exportingShow === s.id;
+            const theme = COLOR_THEMES.find(t => t.id === (profileData.accent_color || "gold")) || COLOR_THEMES[0];
+            const showWinners = isCurrentShow ? winners : {};
+            const showPicks = allPicksByShow[s.id] || {};
             return (
               <div key={s.id} className={`show-ballot-row ${isCurrentShow ? "current-show" : ""}`}>
                 <div className="show-ballot-top">
                   <span className="show-ballot-name">{s.name}</span>
-                  <span className="show-ballot-pct">{pct}%</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                    <span className="show-ballot-pct">{pct}%</span>
+                    {bothPicked > 0 && (
+                      <button
+                        className="export-picks-btn"
+                        onClick={() => setExportingShow(isExporting ? null : s.id)}
+                        title="Export ballot as image"
+                      >
+                        {isExporting ? "Close" : "Share ↗"}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="show-ballot-bar-track">
                   <div className="show-ballot-bar-fill" style={{ width: `${pct}%` }} />
@@ -1452,6 +1673,19 @@ function Profile({ user, picks, show }) {
                   <span className="sbc-divider">·</span>
                   <span className="sbc-both">Both {bothPicked}/{total}</span>
                 </div>
+                {isExporting && (
+                  <div className="export-card-container">
+                    <PicksExportCard
+                      show={s}
+                      picks={showPicks}
+                      winners={showWinners}
+                      displayName={displayName}
+                      willColor={theme.will}
+                      shouldColor={theme.should}
+                      onClose={() => setExportingShow(null)}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}

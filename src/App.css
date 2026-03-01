@@ -1284,3 +1284,33 @@ body {
 .lifecycle-guide-title { font-family: 'DM Mono', monospace; font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.25rem; }
 .lifecycle-guide p { font-size: 0.75rem; color: var(--text-dim); line-height: 1.5; margin: 0; }
 .lifecycle-guide strong { color: var(--white); }
+
+/* ============================================================
+   PICKS EXPORT CARD
+   ============================================================ */
+
+.export-picks-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: var(--gold);
+  background: var(--gold-dim);
+  border: 1px solid var(--gold);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+.export-picks-btn:hover { background: var(--gold); color: var(--bg); }
+
+.export-card-container {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+
+.export-card-wrap {
+  display: flex;
+  flex-direction: column;
+}
