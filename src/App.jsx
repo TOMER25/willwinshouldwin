@@ -1222,6 +1222,25 @@ function BallotCard({ show, displayName, willCorrect, shouldCorrect, totalWithWi
 // ============================================================
 // PICKS EXPORT CARD — full ballot image for social sharing
 // ============================================================
+
+function wrapText(ctx, text, maxWidth) {
+  if (!text) return [];
+  const words = text.split(" ");
+  const lines = [];
+  let current = "";
+  for (const word of words) {
+    const test = current ? current + " " + word : word;
+    if (ctx.measureText(test).width <= maxWidth) {
+      current = test;
+    } else {
+      if (current) lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
 function PicksExportCard({ show, picks, winners, displayName, willColor, shouldColor, onClose }) {
   const canvasRef = useRef(null);
   const categories = show.categories;
@@ -1232,27 +1251,57 @@ function PicksExportCard({ show, picks, winners, displayName, willColor, shouldC
   const generate = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
 
-    // ── Layout (logical px — rendered at 2× for high-res) ──
-    const SCALE = 2;
-    const W = 800;                    // logical width
-    const PADDING = 36;
-    const COL_GAP = 24;               // gap between columns
-    const COL_W = (W - PADDING * 2 - COL_GAP) / 2;
-    const HEADER_H = 148;
-    const ROW_H = 72;                 // stacked: cat label + will + should
-    const FOOTER_H = 64;
-    const CAT_COUNT = categories.length;
-    const ROWS_PER_COL = Math.ceil(CAT_COUNT / 2);
-    const BODY_H = ROWS_PER_COL * ROW_H;
-    const H = HEADER_H + BODY_H + FOOTER_H;
+    // Layout constants (logical px — canvas rendered at 2x for hi-res)
+    const SCALE        = 2;
+    const W            = 800;
+    const PADDING      = 36;
+    const COL_GAP      = 24;
+    const COL_W        = (W - PADDING * 2 - COL_GAP) / 2;
+    const HALF_W       = COL_W / 2 - 8;
+    const HEADER_H     = 178;   // taller to fit logo + name
+    const FOOTER_H     = 64;
+    const LINE_H       = 18;
+    const CAT_H        = 18;
+    const ROW_PAD      = 14;
+    const ROWS_PER_COL = Math.ceil(categories.length / 2);
 
-    // Set canvas at 2× resolution, display at 1×
-    canvas.width  = W * SCALE;
-    canvas.height = H * SCALE;
+    const F_PICK  = "13px Georgia, serif";
+    const F_BPICK = "bold 13px Georgia, serif";
+    const F_CAT   = "10px monospace";
+    const F_LGND  = "10px monospace";
+    const F_FOOT  = "10px monospace";
+    const F_SCORE = "bold 13px Georgia, serif";
+
+    // ── Unscaled measurement canvas ──
+    // IMPORTANT: always use mCtx (never the 2x-scaled ctx) for measureText/wrapText
+    const tmp = document.createElement("canvas");
+    tmp.width = W; tmp.height = 10;
+    const mCtx = tmp.getContext("2d");  // no scale applied
+
+    // Pre-measure: compute each row's height from real wrapped line counts
+    const rowHeights = categories.map(cat => {
+      const p = picks[cat.id] || {};
+      mCtx.font = F_PICK;
+      const wLines = wrapText(mCtx, p.will_win   ? "\u2605 " + p.will_win   : "", HALF_W);
+      const sLines = wrapText(mCtx, p.should_win ? "\u2665 " + p.should_win : "", HALF_W);
+      const maxLines = Math.max(wLines.length || 1, sLines.length || 1);
+      return CAT_H + maxLines * LINE_H + ROW_PAD;
+    });
+
+    const colH = [0, 0];
+    for (let i = 0; i < categories.length; i++) {
+      colH[i < ROWS_PER_COL ? 0 : 1] += rowHeights[i];
+    }
+    const BODY_H = Math.max(colH[0], colH[1]);
+    const H      = HEADER_H + BODY_H + FOOTER_H;
+
+    // ── Set up hi-res canvas ──
+    canvas.width        = W * SCALE;
+    canvas.height       = H * SCALE;
     canvas.style.width  = "100%";
     canvas.style.height = "auto";
+    const ctx = canvas.getContext("2d");
     ctx.scale(SCALE, SCALE);
 
     // ── Background ──
@@ -1262,196 +1311,194 @@ function PicksExportCard({ show, picks, winners, displayName, willColor, shouldC
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
 
-    // ── Top gradient bar ──
-    const barGrad = ctx.createLinearGradient(0, 0, W, 0);
-    barGrad.addColorStop(0, willColor);
-    barGrad.addColorStop(1, shouldColor);
-    ctx.fillStyle = barGrad;
+    // ── Top accent bar ──
+    const bar = ctx.createLinearGradient(0, 0, W, 0);
+    bar.addColorStop(0, willColor);
+    bar.addColorStop(1, shouldColor);
+    ctx.fillStyle = bar;
     ctx.fillRect(0, 0, W, 5);
 
-    // ── Column divider ──
-    ctx.strokeStyle = "#1e2540";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(W / 2, HEADER_H - 4);
-    ctx.lineTo(W / 2, HEADER_H + BODY_H + 4);
-    ctx.stroke();
+    // ── Logo: "★ WillWin / ♥ ShouldWin" ──
+    const logoY = 46;
+    ctx.textAlign = "center";
 
-    // ── Header ──
-    // Show name
-    ctx.font = "600 11px 'Courier New', monospace";
+    // Measure each piece to center the whole logo
+    ctx.font = "bold 22px Georgia, serif";
+    const wwW  = ctx.measureText("WillWin").width;
+    ctx.font = "16px monospace";
+    const sepW = ctx.measureText("  /  ").width;
+    ctx.font = "bold 22px Georgia, serif";
+    const swW  = ctx.measureText("ShouldWin").width;
+    ctx.font = "18px monospace";
+    const starW = ctx.measureText("\u2605 ").width;
+    const heartW= ctx.measureText(" \u2665 ").width;
+
+    const totalLogoW = starW + wwW + sepW + heartW + swW;
+    let lx = (W - totalLogoW) / 2;
+
+    ctx.textAlign = "left";
+    ctx.font = "18px monospace";
+    ctx.fillStyle = willColor;
+    ctx.fillText("\u2605 ", lx, logoY);
+    lx += starW;
+
+    ctx.font = "bold 22px Georgia, serif";
+    ctx.fillStyle = willColor;
+    ctx.fillText("WillWin", lx, logoY);
+    lx += wwW;
+
+    ctx.font = "16px monospace";
+    ctx.fillStyle = "#555d78";
+    ctx.fillText("  /  ", lx, logoY);
+    lx += sepW;
+
+    ctx.font = "18px monospace";
+    ctx.fillStyle = shouldColor;
+    ctx.fillText("\u2665 ", lx, logoY);
+    lx += heartW;
+
+    ctx.font = "bold 22px Georgia, serif";
+    ctx.fillStyle = shouldColor;
+    ctx.fillText("ShouldWin", lx, logoY);
+
+    // ── Show name ──
+    ctx.font = "11px monospace";
     ctx.fillStyle = "#555d78";
     ctx.textAlign = "center";
-    ctx.fillText(show.name.toUpperCase(), W / 2, 34);
+    ctx.fillText(show.name.toUpperCase(), W / 2, logoY + 22);
 
-    // Display name title
-    ctx.font = "bold 36px Georgia, serif";
+    // ── Display name ──
+    ctx.font = "bold 34px Georgia, serif";
     ctx.fillStyle = "#f0f0f5";
-    ctx.fillText(`${displayName}'s Ballot`, W / 2, 78);
+    ctx.fillText(displayName + "\u2019s Ballot", W / 2, logoY + 66);
 
-    // Legend row — one per column
-    const legendY = 108;
-    const legendFont = "10px 'Courier New', monospace";
-    ctx.font = legendFont;
-    ctx.textAlign = "left";
-
+    // ── Legend ──
     const leftX  = PADDING;
     const rightX = W / 2 + COL_GAP / 2 + 2;
-
-    for (const colX of [leftX, rightX]) {
-      ctx.fillStyle = willColor;
-      ctx.fillText("★  Will Win", colX, legendY);
-      ctx.fillStyle = shouldColor;
-      ctx.fillText("♥  Should Win", colX + COL_W / 2, legendY);
+    const legendY = HEADER_H - 24;
+    ctx.font = F_LGND;
+    ctx.textAlign = "left";
+    for (const cx of [leftX, rightX]) {
+      ctx.fillStyle = willColor;   ctx.fillText("\u2605  Will Win",    cx,              legendY);
+      ctx.fillStyle = shouldColor; ctx.fillText("\u2665  Should Win",  cx + HALF_W + 10, legendY);
     }
 
-    // Header divider
-    ctx.strokeStyle = "#2a3050";
-    ctx.lineWidth = 1;
+    // Column divider
+    ctx.strokeStyle = "#1e2540"; ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(PADDING, HEADER_H - 10);
-    ctx.lineTo(W - PADDING, HEADER_H - 10);
+    ctx.moveTo(W / 2, HEADER_H - 4); ctx.lineTo(W / 2, HEADER_H + BODY_H + 4);
+    ctx.stroke();
+
+    // Header divider
+    ctx.strokeStyle = "#2a3050"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(PADDING, HEADER_H - 10); ctx.lineTo(W - PADDING, HEADER_H - 10);
     ctx.stroke();
 
     // ── Category rows ──
     const colXs = [leftX, rightX];
+    const colY  = [0, 0];
 
     categories.forEach((cat, i) => {
-      const col     = i < ROWS_PER_COL ? 0 : 1;
-      const rowIdx  = col === 0 ? i : i - ROWS_PER_COL;
-      const x       = colXs[col];
-      const y       = HEADER_H + rowIdx * ROW_H;
-      const availW  = COL_W - 8;
-      const halfW   = availW / 2 - 4;
+      const col  = i < ROWS_PER_COL ? 0 : 1;
+      const x    = colXs[col];
+      const y    = HEADER_H + colY[col];
+      const rowH = rowHeights[i];
+      colY[col] += rowH;
 
-      const userPick  = picks[cat.id] || {};
-      const willPick  = userPick.will_win  || null;
-      const shouldPick= userPick.should_win|| null;
-      const winner    = winners[cat.id]    || null;
+      const p    = picks[cat.id]   || {};
+      const wp   = p.will_win      || null;
+      const sp   = p.should_win    || null;
+      const win  = winners[cat.id] || null;
+      const wHit = !!(win && wp === win);
+      const sHit = !!(win && sp === win);
+      const rowIdx = col === 0 ? i : i - ROWS_PER_COL;
 
-      const willCorrect   = winner && willPick   === winner;
-      const shouldCorrect = winner && shouldPick === winner;
-
-      // Alternating row tint
+      // Alternating tint
       if (rowIdx % 2 === 0) {
-        ctx.fillStyle = "rgba(255,255,255,0.016)";
-        ctx.fillRect(col === 0 ? 0 : W / 2, y, W / 2, ROW_H);
+        ctx.fillStyle = "rgba(255,255,255,0.018)";
+        ctx.fillRect(col === 0 ? 0 : W / 2, y, W / 2, rowH);
       }
-
-      // Correct will-win highlight
-      if (willCorrect) {
+      // Correct-pick highlight
+      if (wHit) {
         ctx.fillStyle = willColor + "1a";
-        ctx.fillRect(col === 0 ? 0 : W / 2, y, W / 2, ROW_H);
-        ctx.strokeStyle = willColor + "33";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(col === 0 ? 0.5 : W / 2 + 0.5, y + 0.5, W / 2 - 1, ROW_H - 1);
+        ctx.fillRect(col === 0 ? 0 : W / 2, y, W / 2, rowH);
+        ctx.strokeStyle = willColor + "33"; ctx.lineWidth = 1;
+        ctx.strokeRect((col === 0 ? 0 : W / 2) + 0.5, y + 0.5, W / 2 - 1, rowH - 1);
       }
-
-      // Category label
-      ctx.font = "10px 'Courier New', monospace";
-      ctx.fillStyle = "#505870";
-      ctx.textAlign = "left";
-      ctx.fillText(cat.name.toUpperCase(), x, y + 16);
 
       // Row bottom border
-      ctx.strokeStyle = "#1a2035";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = "#1a2035"; ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(col === 0 ? 0 : W / 2, y + ROW_H);
-      ctx.lineTo(col === 0 ? W / 2 : W, y + ROW_H);
+      ctx.moveTo(col === 0 ? 0 : W / 2, y + rowH);
+      ctx.lineTo(col === 0 ? W / 2 : W,  y + rowH);
       ctx.stroke();
 
-      // ── Will Win pick ──
-      const willX = x;
-      const pickY = y + 38;
+      // Category label
+      ctx.font = F_CAT; ctx.fillStyle = "#505870"; ctx.textAlign = "left";
+      ctx.fillText(cat.name.toUpperCase(), x, y + CAT_H - 3);
 
-      if (willPick) {
-        ctx.font = `${willCorrect ? "bold" : "normal"} 13px Georgia, serif`;
-        ctx.fillStyle = willCorrect ? willColor : willColor + "bb";
-        ctx.textAlign = "left";
-        const prefix = willCorrect ? "★ " : "★ ";
-        ctx.fillText(fitText(ctx, prefix + willPick, halfW), willX, pickY);
-      } else {
-        ctx.font = "12px Georgia, serif";
-        ctx.fillStyle = "#2e3450";
-        ctx.fillText("★  —", willX, pickY);
-      }
-
-      // ── Should Win pick ──
-      const shouldX = x + halfW + 8;
-
-      if (shouldPick) {
-        ctx.font = `${shouldCorrect ? "bold" : "normal"} 13px Georgia, serif`;
-        ctx.fillStyle = shouldCorrect ? shouldColor : shouldColor + "bb";
-        ctx.textAlign = "left";
-        ctx.fillText(fitText(ctx, "♥ " + shouldPick, halfW), shouldX, pickY);
-      } else {
-        ctx.font = "12px Georgia, serif";
-        ctx.fillStyle = "#2e3450";
-        ctx.fillText("♥  —", shouldX, pickY);
-      }
-
-      // Mid-column pick divider
-      ctx.strokeStyle = "#1e2540";
-      ctx.lineWidth = 1;
+      // Pick zone divider
+      ctx.strokeStyle = "#1e2540"; ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(x + halfW + 4, y + 24);
-      ctx.lineTo(x + halfW + 4, y + ROW_H - 6);
+      ctx.moveTo(x + HALF_W + 6, y + CAT_H);
+      ctx.lineTo(x + HALF_W + 6, y + rowH - 4);
       ctx.stroke();
+
+      const pickY  = y + CAT_H + LINE_H - 2;
+      const shouldX = x + HALF_W + 12;
+
+      // Will Win — wrap using unscaled mCtx for measurement
+      mCtx.font = wHit ? F_BPICK : F_PICK;
+      ctx.font   = wHit ? F_BPICK : F_PICK;
+      ctx.fillStyle = wp ? (wHit ? willColor : willColor + "cc") : "#2e3450";
+      ctx.textAlign = "left";
+      const wLines = wp ? wrapText(mCtx, "\u2605 " + wp, HALF_W) : ["\u2605  \u2014"];
+      if (!wp) { ctx.fillStyle = "#2e3450"; ctx.font = F_PICK; }
+      wLines.forEach((ln, li) => ctx.fillText(ln, x, pickY + li * LINE_H));
+
+      // Should Win — wrap using unscaled mCtx for measurement
+      mCtx.font = sHit ? F_BPICK : F_PICK;
+      ctx.font   = sHit ? F_BPICK : F_PICK;
+      ctx.fillStyle = sp ? (sHit ? shouldColor : shouldColor + "cc") : "#2e3450";
+      const sLines = sp ? wrapText(mCtx, "\u2665 " + sp, HALF_W) : ["\u2665  \u2014"];
+      if (!sp) { ctx.fillStyle = "#2e3450"; ctx.font = F_PICK; }
+      sLines.forEach((ln, li) => ctx.fillText(ln, shouldX, pickY + li * LINE_H));
     });
 
     // ── Footer ──
     const footY = HEADER_H + BODY_H;
-    ctx.strokeStyle = "#2a3050";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(PADDING, footY + 14);
-    ctx.lineTo(W - PADDING, footY + 14);
-    ctx.stroke();
+    ctx.strokeStyle = "#2a3050"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PADDING, footY + 14); ctx.lineTo(W - PADDING, footY + 14); ctx.stroke();
 
     if (resultsMode) {
-      const willCorrectCount  = categories.filter(c => winners[c.id] && picks[c.id]?.will_win  === winners[c.id]).length;
-      const shouldCorrectCount= categories.filter(c => winners[c.id] && picks[c.id]?.should_win === winners[c.id]).length;
-      const total = categories.filter(c => winners[c.id]).length;
-      ctx.font = "bold 13px Georgia, serif";
-      ctx.fillStyle = willColor;
-      ctx.textAlign = "left";
-      ctx.fillText(`★ ${willCorrectCount}/${total}`, PADDING, footY + 38);
-      ctx.fillStyle = shouldColor;
-      ctx.fillText(`♥ ${shouldCorrectCount}/${total}`, PADDING + 80, footY + 38);
-      ctx.font = "10px 'Courier New', monospace";
-      ctx.fillStyle = "#3a4060";
-      ctx.textAlign = "right";
-      ctx.fillText("willwinshouldwin.com", W - PADDING, footY + 38);
+      const wc  = categories.filter(c => winners[c.id] && picks[c.id]?.will_win   === winners[c.id]).length;
+      const sc  = categories.filter(c => winners[c.id] && picks[c.id]?.should_win === winners[c.id]).length;
+      const tot = categories.filter(c => winners[c.id]).length;
+      ctx.font = F_SCORE; ctx.textAlign = "left";
+      ctx.fillStyle = willColor;   ctx.fillText("\u2605 " + wc + "/" + tot, PADDING,      footY + 40);
+      ctx.fillStyle = shouldColor; ctx.fillText("\u2665 " + sc + "/" + tot, PADDING + 80, footY + 40);
+      ctx.font = F_FOOT; ctx.fillStyle = "#3a4060"; ctx.textAlign = "right";
+      ctx.fillText("willwinshouldwin.com", W - PADDING, footY + 40);
     } else {
-      ctx.font = "10px 'Courier New', monospace";
-      ctx.fillStyle = "#3a4060";
-      ctx.textAlign = "center";
-      ctx.fillText("willwinshouldwin.com", W / 2, footY + 38);
+      ctx.font = F_FOOT; ctx.fillStyle = "#3a4060"; ctx.textAlign = "center";
+      ctx.fillText("willwinshouldwin.com", W / 2, footY + 40);
     }
   };
 
   const download = () => {
-    const canvas = canvasRef.current;
     const a = document.createElement("a");
-    a.download = `${displayName.replace(/\s+/g, "-").toLowerCase()}-ballot.png`;
-    a.href = canvas.toDataURL("image/png");
+    a.download = displayName.replace(/\s+/g, "-").toLowerCase() + "-ballot.png";
+    a.href = canvasRef.current.toDataURL("image/png");
     a.click();
   };
 
   return (
     <div className="export-card-wrap">
-      <canvas
-        ref={canvasRef}
-        style={{ width: "100%", borderRadius: "8px", border: "1px solid var(--border)", display: "block" }}
-      />
+      <canvas ref={canvasRef} style={{ width: "100%", borderRadius: "8px", border: "1px solid var(--border)", display: "block" }} />
       <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.75rem" }}>
-        <button className="results-card-btn" style={{ flex: 1 }} onClick={download}>
-          Download image
-        </button>
-        <button className="results-close-btn" style={{ flex: 1 }} onClick={onClose}>
-          Done
-        </button>
+        <button className="results-card-btn" style={{ flex: 1 }} onClick={download}>Download image</button>
+        <button className="results-close-btn" style={{ flex: 1 }} onClick={onClose}>Done</button>
       </div>
       <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textAlign: "center", marginTop: "0.4rem" }}>
         Screenshot or download to share
@@ -1459,17 +1506,6 @@ function PicksExportCard({ show, picks, winners, displayName, willColor, shouldC
     </div>
   );
 }
-
-// Truncate text to fit within maxWidth using canvas measureText
-function fitText(ctx, text, maxWidth) {
-  if (ctx.measureText(text).width <= maxWidth) return text;
-  let truncated = text;
-  while (truncated.length > 1 && ctx.measureText(truncated + "…").width > maxWidth) {
-    truncated = truncated.slice(0, -1);
-  }
-  return truncated + "…";
-}
-
 // ============================================================
 // COLOR THEMES
 // ============================================================
