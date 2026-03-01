@@ -1556,6 +1556,11 @@ function Profile({ user, picks, show }) {
   const [posterSearch, setPosterSearch] = useState(null); // { loading, results: [{title, year, poster, imdbID}] }
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [exportingShow, setExportingShow] = useState(null);
+  const [username, setUsername] = useState("");
+  const [usernameDraft, setUsernameDraft] = useState("");
+  const [usernameError, setUsernameError] = useState("");
+  const [savingUsername, setSavingUsername] = useState(false);
+  const [usernameSaved, setUsernameSaved] = useState(false);
   const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "Friend";
 
   const memberSince = user.created_at
@@ -1607,11 +1612,12 @@ function Profile({ user, picks, show }) {
 
   const loadProfile = async () => {
     const { data } = await supabase.from("profiles")
-      .select("accent_color, favorite_movie, favorite_movie_poster")
+      .select("accent_color, favorite_movie, favorite_movie_poster, username")
       .eq("id", user.id).single();
     if (data) {
       setProfileData(data);
       applyTheme(data.accent_color || "gold");
+      if (data.username) { setUsername(data.username); setUsernameDraft(data.username); }
     }
   };
 
@@ -1668,6 +1674,24 @@ function Profile({ user, picks, show }) {
     setEditingMovie(false);
     setPosterSearch(null);
     setMovieDraft("");
+  };
+
+  const saveUsername = async () => {
+    const cleaned = usernameDraft.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+    if (!cleaned) { setUsernameError("Username can't be empty."); return; }
+    if (cleaned.length < 3) { setUsernameError("Must be at least 3 characters."); return; }
+    if (cleaned.length > 30) { setUsernameError("Max 30 characters."); return; }
+    setSavingUsername(true); setUsernameError("");
+    const { error } = await supabase.from("profiles").update({ username: cleaned }).eq("id", user.id);
+    if (error) {
+      setUsernameError(error.message.includes("unique") ? "That username is taken." : "Error saving. Try again.");
+    } else {
+      setUsername(cleaned);
+      setUsernameDraft(cleaned);
+      setUsernameSaved(true);
+      setTimeout(() => setUsernameSaved(false), 2000);
+    }
+    setSavingUsername(false);
   };
 
   // Per-show ballot stats — recomputes whenever allShows or allPicksByShow changes
@@ -1782,6 +1806,33 @@ function Profile({ user, picks, show }) {
 
           {customizeOpen && (
             <div className="customize-body">
+
+              {/* Public username */}
+              <div className="username-section">
+                <p className="theme-label">Public username</p>
+                <p className="username-hint">Sets your shareable profile URL: willwinshouldwin.com/?u=<strong>{username || "yourname"}</strong></p>
+                <div className="username-row">
+                  <input
+                    className="auth-input username-input"
+                    placeholder="yourname"
+                    value={usernameDraft}
+                    onChange={e => { setUsernameDraft(e.target.value); setUsernameError(""); }}
+                    onKeyDown={e => e.key === "Enter" && saveUsername()}
+                    maxLength={30}
+                  />
+                  <button className="auth-submit username-save-btn" onClick={saveUsername} disabled={savingUsername}>
+                    {savingUsername ? "…" : usernameSaved ? "✓ Saved" : "Save"}
+                  </button>
+                </div>
+                {usernameError && <p className="auth-error" style={{ marginTop: "0.4rem" }}>{usernameError}</p>}
+                {username && (
+                  <p className="username-link-row">
+                    <a className="username-view-link" href={`/?u=${username}`} target="_blank" rel="noreferrer">
+                      View your public profile ↗
+                    </a>
+                  </p>
+                )}
+              </div>
               {/* Color theme */}
               <div className="theme-section">
                 <p className="theme-label">Color theme</p>
@@ -2364,29 +2415,227 @@ function AdminPanel({ onBack }) {
 }
 
 // ============================================================
-// STANDALONE PROFILE PAGE (for /profile and ?compare= links)
 // ============================================================
-function StandaloneProfile({ user, onBack, allShows }) {
+// PUBLIC PROFILE PAGE — viewable without login
+// ============================================================
+function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, onBack }) {
+  const [profileData, setProfileData] = useState(null);
+  const [picks, setPicks] = useState({});       // { show_id: { cat_id: { will_win, should_win } } }
+  const [winners, setWinners] = useState({});   // { show_id: { cat_id: winner } }
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [theme, setTheme] = useState(COLOR_THEMES[0]);
+
+  useEffect(() => { loadAll(); }, [targetUserId]);
+
+  const loadAll = async () => {
+    setLoading(true);
+
+    // Load profile
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("id, accent_color, favorite_movie, favorite_movie_poster, username")
+      .eq("id", targetUserId)
+      .single();
+
+    if (!prof) { setNotFound(true); setLoading(false); return; }
+    setProfileData(prof);
+    const t = COLOR_THEMES.find(c => c.id === prof.accent_color) || COLOR_THEMES[0];
+    setTheme(t);
+    applyTheme(t.id);
+
+    // Load all picks for this user
+    const { data: allPicks } = await supabase
+      .from("picks").select("*").eq("user_id", targetUserId);
+
+    const byShow = {};
+    (allPicks || []).forEach(p => {
+      if (!byShow[p.show_id]) byShow[p.show_id] = {};
+      byShow[p.show_id][p.category_id] = { will_win: p.will_win, should_win: p.should_win };
+    });
+    setPicks(byShow);
+
+    // Load winners for all shows
+    const { data: allWinners } = await supabase.from("winners").select("*");
+    const byShowW = {};
+    (allWinners || []).forEach(w => {
+      if (!byShowW[w.show_id]) byShowW[w.show_id] = {};
+      byShowW[w.show_id][w.category_id] = w.will_win_winner;
+    });
+    setWinners(byShowW);
+
+    setLoading(false);
+  };
+
+  const copyLink = () => {
+    const url = `${window.location.origin}/?u=${targetUsername || targetUserId}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (loading) return (
+    <div className="app">
+      <header className="app-header">
+        <div className="header-top">
+          <div className="header-left">
+            {onBack && <button className="back-home-btn" onClick={onBack}>←</button>}
+            <Logo />
+          </div>
+        </div>
+      </header>
+      <div className="app-main"><div className="loading">Loading profile…</div></div>
+    </div>
+  );
+
+  if (notFound) return (
+    <div className="app">
+      <header className="app-header">
+        <div className="header-top">
+          <div className="header-left">
+            {onBack && <button className="back-home-btn" onClick={onBack}>←</button>}
+            <Logo />
+          </div>
+        </div>
+      </header>
+      <div className="app-main">
+        <div className="public-profile-not-found">
+          <p className="not-found-icon">🎬</p>
+          <h3>Profile not found</h3>
+          <p>This profile doesn't exist or may have been removed.</p>
+          {onBack && <button className="auth-submit" style={{ marginTop: "1.5rem", width: "auto", padding: "0.6rem 1.5rem" }} onClick={onBack}>Go home</button>}
+        </div>
+      </div>
+    </div>
+  );
+
+  const displayName = profileData.username || "Anonymous";
+  const profileUrl = `${window.location.origin}/?u=${targetUsername || targetUserId}`;
+
+  // Per-show stats
+  const showStats = allShows.map(show => {
+    const showPicks   = picks[show.id]   || {};
+    const showWinners = winners[show.id] || {};
+    const total       = show.categories.length;
+    const willPicked  = show.categories.filter(c => showPicks[c.id]?.will_win).length;
+    const shouldPicked= show.categories.filter(c => showPicks[c.id]?.should_win).length;
+    const bothPicked  = show.categories.filter(c => showPicks[c.id]?.will_win && showPicks[c.id]?.should_win).length;
+    const withWinners = show.categories.filter(c => showWinners[c.id]);
+    const willCorrect = withWinners.filter(c => showPicks[c.id]?.will_win === showWinners[c.id]).length;
+    const shouldCorrect=withWinners.filter(c => showPicks[c.id]?.should_win=== showWinners[c.id]).length;
+    return { show, total, willPicked, shouldPicked, bothPicked, willCorrect, shouldCorrect, graded: withWinners.length };
+  }).filter(s => s.bothPicked > 0);
+
   return (
     <div className="app">
       <header className="app-header">
         <div className="header-top">
           <div className="header-left">
-            <button className="back-home-btn" onClick={onBack}>←</button>
+            {onBack && <button className="back-home-btn" onClick={onBack} title="Back">←</button>}
             <Logo onClick={onBack} />
           </div>
           <div className="header-right">
-            <button className="signout-btn" onClick={() => supabase.auth.signOut()}>Sign Out</button>
+            {currentUser && (
+              <button className="signout-btn" onClick={() => supabase.auth.signOut()}>Sign Out</button>
+            )}
           </div>
         </div>
       </header>
+
       <div className="app-main">
-        <h2 className="section-title">My Profile</h2>
-        {allShows.map(show => (
-          <div key={show.id} style={{ marginBottom: "2rem" }}>
-            <Profile user={user} picks={{}} show={show} />
+        <div className="public-profile-wrap">
+
+          {/* Identity card */}
+          <div className="profile-card">
+            <div className="profile-avatar" style={{ background: `linear-gradient(135deg, ${theme.will}, ${theme.should})` }}>
+              {displayName[0].toUpperCase()}
+            </div>
+            <div className="profile-info">
+              <h2 className="profile-name">{displayName}</h2>
+              {profileData.username && (
+                <p className="profile-meta public-profile-url" onClick={copyLink} title="Copy link" style={{ cursor: "pointer" }}>
+                  {copied ? "✓ Copied!" : `willwinshouldwin.com/?u=${profileData.username}`}
+                </p>
+              )}
+              {profileData.favorite_movie && (
+                <p className="profile-fav-movie">❤ {profileData.favorite_movie}</p>
+              )}
+            </div>
+            {profileData.favorite_movie_poster && (
+              <div className="profile-poster-wrap">
+                <img className="profile-poster" src={profileData.favorite_movie_poster} alt={profileData.favorite_movie} />
+              </div>
+            )}
           </div>
-        ))}
+
+          {/* Share link */}
+          <div className="public-share-row">
+            <span className="compare-link-text">{profileUrl}</span>
+            <button className="copy-link-btn" onClick={copyLink}>{copied ? "Copied!" : "Copy"}</button>
+          </div>
+
+          {/* Show ballots */}
+          {showStats.length === 0 ? (
+            <div className="public-no-picks">
+              <p>{displayName} hasn't made any picks yet.</p>
+            </div>
+          ) : (
+            showStats.map(({ show, total, willPicked, shouldPicked, bothPicked, willCorrect, shouldCorrect, graded }) => (
+              <div key={show.id} className="public-show-section">
+                <div className="public-show-header">
+                  <span className="public-show-name">{show.name}</span>
+                  {graded > 0 && (
+                    <span className="public-show-scores">
+                      <span style={{ color: theme.will }}>★ {willCorrect}/{graded}</span>
+                      <span className="sbc-divider">·</span>
+                      <span style={{ color: theme.should }}>♥ {shouldCorrect}/{graded}</span>
+                    </span>
+                  )}
+                </div>
+
+                <div className="public-picks-grid">
+                  {show.categories.map(cat => {
+                    const p = picks[show.id]?.[cat.id] || {};
+                    const win = winners[show.id]?.[cat.id];
+                    const wHit = win && p.will_win === win;
+                    const sHit = win && p.should_win === win;
+                    if (!p.will_win && !p.should_win) return null;
+                    return (
+                      <div key={cat.id} className={`public-pick-row ${wHit ? "public-pick-correct" : ""}`}
+                           style={wHit ? { borderLeftColor: theme.will } : {}}>
+                        <span className="public-cat-name">{cat.name}</span>
+                        <div className="public-picks">
+                          {p.will_win && (
+                            <span className="public-pick-item" style={{ color: wHit ? theme.will : theme.will + "aa" }}>
+                              ★ {p.will_win}
+                            </span>
+                          )}
+                          {p.should_win && (
+                            <span className="public-pick-item" style={{ color: sHit ? theme.should : theme.should + "aa" }}>
+                              ♥ {p.should_win}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          )}
+
+          {/* CTA for visitors not logged in */}
+          {!currentUser && (
+            <div className="public-cta">
+              <p className="public-cta-text">Make your own picks for awards season</p>
+              <button className="auth-submit" style={{ width: "auto", padding: "0.7rem 2rem" }}
+                onClick={() => window.location.href = window.location.origin}>
+                Join WillWin / ShouldWin
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       <footer className="app-footer">willwinshouldwin.com</footer>
     </div>
@@ -2397,15 +2646,25 @@ function StandaloneProfile({ user, onBack, allShows }) {
 // MAIN APP
 // ============================================================
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [screen, setScreen] = useState("home");
+  const [user, setUser]           = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const [screen, setScreen]       = useState("home");
   const [activeShow, setActiveShow] = useState(null);
-  const [allShows, setAllShows] = useState([]);
+  const [allShows, setAllShows]   = useState([]);
   const [showsLoading, setShowsLoading] = useState(true);
+  const [publicProfileId, setPublicProfileId] = useState(null);
+  const [publicProfileUsername, setPublicProfileUsername] = useState(null);
 
   useEffect(() => {
     document.title = "WillWin / ShouldWin";
+
+    // Check URL for public profile param: ?u=username
+    const params = new URLSearchParams(window.location.search);
+    const uParam = params.get("u");
+    if (uParam) {
+      resolveUsername(uParam);
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) loadUserTheme(session.user.id);
@@ -2418,6 +2677,27 @@ export default function App() {
     loadAllShows();
     return () => subscription.unsubscribe();
   }, []);
+
+  const resolveUsername = async (usernameOrId) => {
+    // Try as username first, fall back to UUID
+    const isUuid = /^[0-9a-f-]{36}$/.test(usernameOrId);
+    if (isUuid) {
+      setPublicProfileId(usernameOrId);
+      setPublicProfileUsername(usernameOrId);
+      setScreen("public-profile");
+    } else {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, username")
+        .ilike("username", usernameOrId)
+        .single();
+      if (data) {
+        setPublicProfileId(data.id);
+        setPublicProfileUsername(data.username);
+        setScreen("public-profile");
+      }
+    }
+  };
 
   const loadUserTheme = async (userId) => {
     const { data } = await supabase.from("profiles").select("accent_color").eq("id", userId).single();
@@ -2441,24 +2721,40 @@ export default function App() {
     setShowsLoading(false);
   };
 
+  const clearPublicProfile = () => {
+    setPublicProfileId(null);
+    setPublicProfileUsername(null);
+    // Clear the ?u= param from URL without reloading
+    window.history.replaceState({}, "", window.location.pathname);
+    setScreen("home");
+  };
+
   if (loading || showsLoading) return <div className="loading-screen"><div className="loading-inner">Loading…</div></div>;
-  if (!user) return <AuthModal onAuth={setUser} />;
 
-  if (screen === "admin") return <AdminPanel onBack={() => { setScreen("home"); loadAllShows(); }} />;
-
-  if (screen === "show" && activeShow) {
-    return <ShowApp show={activeShow} user={user} allShows={allShows} onGoHome={() => { setScreen("home"); setActiveShow(null); }} />;
+  // Public profile — shown to anyone, logged in or not
+  if (screen === "public-profile" && publicProfileId) {
+    return (
+      <PublicProfile
+        targetUserId={publicProfileId}
+        targetUsername={publicProfileUsername}
+        allShows={allShows}
+        currentUser={user}
+        onBack={clearPublicProfile}
+      />
+    );
   }
 
-  if (screen === "profile") {
-    return <StandaloneProfile user={user} onBack={() => setScreen("home")} allShows={allShows} />;
+  if (!user) return <AuthModal onAuth={setUser} />;
+  if (screen === "admin") return <AdminPanel onBack={() => { setScreen("home"); loadAllShows(); }} />;
+  if (screen === "show" && activeShow) {
+    return <ShowApp show={activeShow} user={user} allShows={allShows} onGoHome={() => { setScreen("home"); setActiveShow(null); }} />;
   }
 
   return (
     <HomeScreen
       onSelectShow={show => { setActiveShow(show); setScreen("show"); }}
       user={user}
-      onGoProfile={() => setScreen("profile")}
+      onGoProfile={() => setScreen("show")}
       onGoAdmin={() => setScreen("admin")}
       allShows={allShows}
     />

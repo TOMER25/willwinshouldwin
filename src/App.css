@@ -1314,3 +1314,53 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+/* ============================================================
+   PUBLIC PROFILE PAGE
+   ============================================================ */
+
+.public-profile-wrap { max-width: 720px; margin: 0 auto; padding: 1.5rem 1rem 3rem; display: flex; flex-direction: column; gap: 1.5rem; }
+
+.public-profile-not-found { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; text-align: center; gap: 0.75rem; color: var(--text-dim); }
+.not-found-icon { font-size: 2.5rem; }
+.public-profile-not-found h3 { font-family: 'Playfair Display', serif; font-size: 1.4rem; color: var(--white); }
+
+.public-profile-url { font-family: 'DM Mono', monospace; font-size: 0.72rem; color: var(--text-muted); }
+.public-profile-url:hover { color: var(--gold); }
+
+.public-share-row { display: flex; align-items: center; gap: 0.75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.75rem; }
+.public-share-row .compare-link-text { flex: 1; font-family: 'DM Mono', monospace; font-size: 0.72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.public-show-section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.public-show-header { display: flex; align-items: center; justify-content: space-between; padding: 0.85rem 1rem; border-bottom: 1px solid var(--border); }
+.public-show-name { font-family: 'Playfair Display', serif; font-size: 1rem; font-weight: 700; color: var(--white); }
+.public-show-scores { display: flex; gap: 0.5rem; align-items: center; font-family: 'DM Mono', monospace; font-size: 0.72rem; }
+
+.public-picks-grid { display: flex; flex-direction: column; }
+.public-pick-row { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.65rem 1rem; border-bottom: 1px solid var(--border-subtle, #151a28); border-left: 3px solid transparent; transition: background 0.15s; }
+.public-pick-row:last-child { border-bottom: none; }
+.public-pick-row:nth-child(even) { background: rgba(255,255,255,0.016); }
+.public-pick-correct { background: rgba(201,168,76,0.06) !important; }
+
+.public-cat-name { font-family: 'DM Mono', monospace; font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+.public-picks { display: flex; flex-direction: column; gap: 0.15rem; }
+.public-pick-item { font-family: 'Playfair Display', serif; font-size: 0.88rem; }
+
+.public-no-picks { padding: 2rem; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+
+.public-cta { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+.public-cta-text { font-family: 'Playfair Display', serif; font-size: 1.1rem; color: var(--white); }
+
+/* ============================================================
+   USERNAME / PROFILE SETTINGS
+   ============================================================ */
+
+.username-section { display: flex; flex-direction: column; gap: 0.5rem; padding-top: 0.75rem; border-top: 1px solid var(--border); margin-top: 0.5rem; }
+.username-hint { font-size: 0.74rem; color: var(--text-muted); line-height: 1.5; }
+.username-hint strong { color: var(--gold); }
+.username-row { display: flex; gap: 0.5rem; align-items: center; }
+.username-input { flex: 1; margin-bottom: 0 !important; font-size: 0.85rem; padding: 0.55rem 0.75rem; }
+.username-save-btn { white-space: nowrap; width: auto !important; padding: 0.55rem 1rem; font-size: 0.8rem; }
+.username-link-row { margin-top: 0.25rem; }
+.username-view-link { font-family: 'DM Mono', monospace; font-size: 0.72rem; color: var(--gold); text-decoration: none; }
+.username-view-link:hover { text-decoration: underline; }
