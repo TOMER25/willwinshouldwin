@@ -673,7 +673,20 @@ function Community({ currentUserId, show }) {
     setLoading(true);
     const { data: picks } = await supabase.from("picks").select("*").eq("show_id", show.id);
     const { data: profiles } = await supabase.from("profiles").select("*");
-    setUserList((profiles || []).filter(p => p.id !== currentUserId));
+    const { data: followsData } = await supabase.from("follows").select("following_id").eq("follower_id", currentUserId);
+    const myFollowingIds = new Set((followsData || []).map(r => r.following_id));
+
+    // Only show users whose visibility allows the current user to see them
+    setUserList(
+      (profiles || []).filter(p => {
+        if (p.id === currentUserId) return false;
+        const vis = p.picks_visibility || "public";
+        if (vis === "public") return true;
+        if (vis === "friends") return myFollowingIds.has(p.id);
+        if (vis === "private") return false;
+        return true;
+      })
+    );
 
     const mine = {};
     (picks || []).filter(p => p.user_id === currentUserId).forEach(p => { mine[p.category_id] = p; });
@@ -721,7 +734,7 @@ function Community({ currentUserId, show }) {
   };
 
   const filteredUsers = userList.filter(u =>
-    (u.display_name || u.email || "").toLowerCase().includes(compareSearch.toLowerCase())
+    (u.username || "").toLowerCase().includes(compareSearch.toLowerCase())
   );
 
   if (loading) return <div className="app-main"><div className="loading">Loading…</div></div>;
@@ -770,13 +783,13 @@ function Community({ currentUserId, show }) {
           {!compareUser ? (
             <div className="compare-search-wrap">
               <h3 className="compare-title">Find a friend to compare with</h3>
-              <input className="auth-input compare-search" placeholder="Search by display name…" value={compareSearch} onChange={e => setCompareSearch(e.target.value)} />
+              <input className="auth-input compare-search" placeholder="Search by username…" value={compareSearch} onChange={e => setCompareSearch(e.target.value)} />
               <div className="user-list">
                 {filteredUsers.length === 0 && <p className="leaderboard-note">No users found.</p>}
                 {filteredUsers.map(u => (
                   <button key={u.id} className="user-list-item" onClick={() => handleSelectUser(u)}>
-                    <span className="user-avatar">{(u.display_name || u.email || "?")[0].toUpperCase()}</span>
-                    <span>{u.display_name || u.email}</span>
+                    <span className="user-avatar">{(u.username || "?")[0].toUpperCase()}</span>
+                    <span>{u.username || "Anonymous"}</span>
                   </button>
                 ))}
               </div>
@@ -792,11 +805,11 @@ function Community({ currentUserId, show }) {
             <div>
               <div className="compare-header">
                 <button className="back-btn" onClick={() => { setCompareUser(null); setCompareSearch(""); }}>← Back</button>
-                <h3 className="compare-title">You vs {compareUser.display_name || compareUser.email}</h3>
+                <h3 className="compare-title">You vs {compareUser.username || "Anonymous"}</h3>
               </div>
               <div className="compare-legend">
                 <span className="compare-you-dot" /> You &nbsp;
-                <span className="compare-them-dot" /> {compareUser.display_name || compareUser.email} &nbsp;
+                <span className="compare-them-dot" /> {compareUser.username || "Anonymous"} &nbsp;
                 <span className="compare-match-dot" /> Both agree
               </div>
               <div className="compare-grid">
@@ -1179,7 +1192,18 @@ function BallotCard({ show, displayName, willCorrect, shouldCorrect, totalWithWi
   const canvasRef = useRef(null);
   const [generated, setGenerated] = useState(false);
 
-  useEffect(() => { generateCard(); }, []);
+  useEffect(() => { loadFontsAndGenerate(); }, []);
+
+  const loadFontsAndGenerate = async () => {
+    try {
+      await Promise.all([
+        new FontFace("Playfair Display", "url(https://fonts.gstatic.com/s/playfairdisplay/v37/nuFiD-vYSZviVYUb_rj3ij__anPXDTzYgEM86xQ.woff2)", { weight: "700" }).load(),
+        new FontFace("DM Mono", "url(https://fonts.gstatic.com/s/dmmono/v14/aFTU7PB1QTsUX8KYvrGyIYSnbKX9Rlk.woff2)", { weight: "400" }).load(),
+      ].map(p => p.then(f => { document.fonts.add(f); return f; }).catch(() => null)));
+      await document.fonts.ready;
+    } catch (_) { /* fall back gracefully */ }
+    generateCard();
+  };
 
   const generateCard = () => {
     const canvas = canvasRef.current;
@@ -1203,7 +1227,7 @@ function BallotCard({ show, displayName, willCorrect, shouldCorrect, totalWithWi
     ctx.strokeRect(22, 22, W - 44, H - 44);
 
     // Star + heart decorations (top corners)
-    ctx.font = "bold 22px serif";
+    ctx.font = "bold 22px 'Playfair Display', Georgia, serif";
     ctx.fillStyle = "#c9a84c";
     ctx.fillText("★", 36, 56);
     ctx.fillStyle = "#c94c5e";
@@ -1216,7 +1240,7 @@ function BallotCard({ show, displayName, willCorrect, shouldCorrect, totalWithWi
     ctx.fillText(show.name.toUpperCase(), W / 2, 52);
 
     // Display name
-    ctx.font = "bold 32px Georgia, serif";
+    ctx.font = "bold 32px 'Playfair Display', Georgia, serif";
     ctx.fillStyle = "#f0f0f5";
     ctx.fillText(displayName, W / 2, 105);
 
@@ -1230,7 +1254,7 @@ function BallotCard({ show, displayName, willCorrect, shouldCorrect, totalWithWi
     // Scores
     const scoreY = 185;
     // Will Win
-    ctx.font = "bold 56px Georgia, serif";
+    ctx.font = "bold 56px 'Playfair Display', Georgia, serif";
     ctx.fillStyle = "#c9a84c";
     ctx.textAlign = "center";
     ctx.fillText(willCorrect, W / 4, scoreY);
@@ -1246,7 +1270,7 @@ function BallotCard({ show, displayName, willCorrect, shouldCorrect, totalWithWi
     ctx.stroke();
 
     // Should Win
-    ctx.font = "bold 56px Georgia, serif";
+    ctx.font = "bold 56px 'Playfair Display', Georgia, serif";
     ctx.fillStyle = "#c94c5e";
     ctx.fillText(shouldCorrect, (W * 3) / 4, scoreY);
     ctx.font = "14px 'DM Mono', monospace";
@@ -1339,7 +1363,21 @@ function PicksExportCard({ show, picks, winners, displayName, willColor, shouldC
   const categories = show.categories;
   const resultsMode = Object.keys(winners).length > 0;
 
-  useEffect(() => { generate(); }, []);
+  useEffect(() => { loadFontsAndGenerate(); }, []);
+
+  const loadFontsAndGenerate = async () => {
+    // Ensure the web fonts used across the site are loaded into the canvas context
+    try {
+      await Promise.all([
+        new FontFace("Playfair Display", "url(https://fonts.gstatic.com/s/playfairdisplay/v37/nuFiD-vYSZviVYUb_rj3ij__anPXDTzYgEM86xQ.woff2)", { weight: "700" }).load(),
+        new FontFace("Playfair Display", "url(https://fonts.gstatic.com/s/playfairdisplay/v37/nuFiD-vYSZviVYUb_rj3ij__anPXDTzYgEM86xQ.woff2)", { weight: "400" }).load(),
+        new FontFace("DM Mono", "url(https://fonts.gstatic.com/s/dmmono/v14/aFTU7PB1QTsUX8KYvrGyIYSnbKX9Rlk.woff2)", { weight: "400" }).load(),
+        new FontFace("DM Mono", "url(https://fonts.gstatic.com/s/dmmono/v14/aFTR7PB1QTsUX8KYth-orYataIf4VllXuA.woff2)", { weight: "500" }).load(),
+      ].map(p => p.then(f => { document.fonts.add(f); return f; }).catch(() => null)));
+      await document.fonts.ready;
+    } catch (_) { /* fall back to system fonts if loading fails */ }
+    generate();
+  };
 
   const generate = () => {
     const canvas = canvasRef.current;
@@ -1359,12 +1397,12 @@ function PicksExportCard({ show, picks, winners, displayName, willColor, shouldC
     const ROW_PAD      = 14;
     const ROWS_PER_COL = Math.ceil(categories.length / 2);
 
-    const F_PICK  = "13px Georgia, serif";
-    const F_BPICK = "bold 13px Georgia, serif";
-    const F_CAT   = "10px monospace";
-    const F_LGND  = "10px monospace";
-    const F_FOOT  = "10px monospace";
-    const F_SCORE = "bold 13px Georgia, serif";
+    const F_PICK  = "13px 'Playfair Display', Georgia, serif";
+    const F_BPICK = "bold 13px 'Playfair Display', Georgia, serif";
+    const F_CAT   = "10px 'DM Mono', monospace";
+    const F_LGND  = "10px 'DM Mono', monospace";
+    const F_FOOT  = "10px 'DM Mono', monospace";
+    const F_SCORE = "bold 13px 'Playfair Display', Georgia, serif";
 
     // ── Unscaled measurement canvas ──
     // IMPORTANT: always use mCtx (never the 2x-scaled ctx) for measureText/wrapText
@@ -1416,13 +1454,13 @@ function PicksExportCard({ show, picks, winners, displayName, willColor, shouldC
     ctx.textAlign = "center";
 
     // Measure each piece to center the whole logo
-    ctx.font = "bold 22px Georgia, serif";
+    ctx.font = "bold 22px 'Playfair Display', Georgia, serif";
     const wwW  = ctx.measureText("WillWin").width;
-    ctx.font = "16px monospace";
+    ctx.font = "16px 'DM Mono', monospace";
     const sepW = ctx.measureText("  /  ").width;
-    ctx.font = "bold 22px Georgia, serif";
+    ctx.font = "bold 22px 'Playfair Display', Georgia, serif";
     const swW  = ctx.measureText("ShouldWin").width;
-    ctx.font = "18px monospace";
+    ctx.font = "18px 'DM Mono', monospace";
     const starW = ctx.measureText("\u2605 ").width;
     const heartW= ctx.measureText(" \u2665 ").width;
 
@@ -1430,38 +1468,38 @@ function PicksExportCard({ show, picks, winners, displayName, willColor, shouldC
     let lx = (W - totalLogoW) / 2;
 
     ctx.textAlign = "left";
-    ctx.font = "18px monospace";
+    ctx.font = "18px 'DM Mono', monospace";
     ctx.fillStyle = willColor;
     ctx.fillText("\u2605 ", lx, logoY);
     lx += starW;
 
-    ctx.font = "bold 22px Georgia, serif";
+    ctx.font = "bold 22px 'Playfair Display', Georgia, serif";
     ctx.fillStyle = willColor;
     ctx.fillText("WillWin", lx, logoY);
     lx += wwW;
 
-    ctx.font = "16px monospace";
+    ctx.font = "16px 'DM Mono', monospace";
     ctx.fillStyle = "#555d78";
     ctx.fillText("  /  ", lx, logoY);
     lx += sepW;
 
-    ctx.font = "18px monospace";
+    ctx.font = "18px 'DM Mono', monospace";
     ctx.fillStyle = shouldColor;
     ctx.fillText("\u2665 ", lx, logoY);
     lx += heartW;
 
-    ctx.font = "bold 22px Georgia, serif";
+    ctx.font = "bold 22px 'Playfair Display', Georgia, serif";
     ctx.fillStyle = shouldColor;
     ctx.fillText("ShouldWin", lx, logoY);
 
     // ── Show name ──
-    ctx.font = "11px monospace";
+    ctx.font = "11px 'DM Mono', monospace";
     ctx.fillStyle = "#555d78";
     ctx.textAlign = "center";
     ctx.fillText(show.name.toUpperCase(), W / 2, logoY + 22);
 
     // ── Display name ──
-    ctx.font = "bold 34px Georgia, serif";
+    ctx.font = "bold 34px 'Playfair Display', Georgia, serif";
     ctx.fillStyle = "#f0f0f5";
     ctx.fillText(displayName + "\u2019s Ballot", W / 2, logoY + 66);
 
