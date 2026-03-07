@@ -1195,13 +1195,22 @@ function BallotCard({ show, displayName, willCorrect, shouldCorrect, totalWithWi
   useEffect(() => { loadFontsAndGenerate(); }, []);
 
   const loadFontsAndGenerate = async () => {
+    if (!document.getElementById('picks-export-fonts')) {
+      const link = document.createElement('link');
+      link.id   = 'picks-export-fonts';
+      link.rel  = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@400;500&display=swap';
+      document.head.appendChild(link);
+    }
     try {
+      await document.fonts.ready;
       await Promise.all([
         document.fonts.load("400 16px 'Playfair Display'"),
         document.fonts.load("700 16px 'Playfair Display'"),
         document.fonts.load("400 16px 'DM Mono'"),
       ]);
-    } catch (_) { /* fall back gracefully */ }
+      await document.fonts.ready;
+    } catch (e) { console.warn('Font loading failed, falling back:', e); }
     generateCard();
   };
 
@@ -1358,34 +1367,34 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
-const loadFontsAndGenerate = async () => {
-  // Ensure Google Fonts stylesheet is injected (safe to call multiple times)
-  if (!document.getElementById('picks-export-fonts')) {
-    const link = document.createElement('link');
-    link.id   = 'picks-export-fonts';
-    link.rel  = 'stylesheet';
-    link.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@400;500&display=swap';
-    document.head.appendChild(link);
-  }
+function PicksExportCard({ show, picks, winners, displayName, willColor, shouldColor, onClose }) {
+  const canvasRef = useRef(null);
+  const categories = show.categories;
+  const resultsMode = Object.keys(winners).length > 0;
 
-  try {
-    // Wait for the stylesheet to load, then explicitly request each weight
-    await document.fonts.ready;
-    await Promise.all([
-      document.fonts.load("400 16px 'Playfair Display'"),
-      document.fonts.load("700 16px 'Playfair Display'"),
-      document.fonts.load("900 16px 'Playfair Display'"),
-      document.fonts.load("400 16px 'DM Mono'"),
-      document.fonts.load("500 16px 'DM Mono'"),
-    ]);
-    // Second ready-check: ensures any newly-loaded fonts are fully settled
-    await document.fonts.ready;
-  } catch (e) {
-    console.warn('Font loading failed, falling back:', e);
-  }
+  useEffect(() => { loadFontsAndGenerate(); }, []);
 
-  generate();
-};
+  const loadFontsAndGenerate = async () => {
+    if (!document.getElementById('picks-export-fonts')) {
+      const link = document.createElement('link');
+      link.id   = 'picks-export-fonts';
+      link.rel  = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@400;500&display=swap';
+      document.head.appendChild(link);
+    }
+    try {
+      await document.fonts.ready;
+      await Promise.all([
+        document.fonts.load("400 16px 'Playfair Display'"),
+        document.fonts.load("700 16px 'Playfair Display'"),
+        document.fonts.load("900 16px 'Playfair Display'"),
+        document.fonts.load("400 16px 'DM Mono'"),
+        document.fonts.load("500 16px 'DM Mono'"),
+      ]);
+      await document.fonts.ready;
+    } catch (e) { console.warn('Font loading failed, falling back:', e); }
+    generate();
+  };
 
   const generate = () => {
     const canvas = canvasRef.current;
