@@ -1195,16 +1195,13 @@ function BallotCard({ show, displayName, willCorrect, shouldCorrect, totalWithWi
   useEffect(() => { loadFontsAndGenerate(); }, []);
 
   const loadFontsAndGenerate = async () => {
-    const GF = 'https://fonts.gstatic.com/s/';
-    const fonts = [
-      new FontFace('Playfair Display', `url(${GF}playfairdisplay/v37/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKdFvUDQ.woff2)`, { weight: '400' }),
-      new FontFace('Playfair Display', `url(${GF}playfairdisplay/v37/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKd3vUDQ.woff2)`, { weight: '700' }),
-      new FontFace('DM Mono', `url(${GF}dmmono/v14/aFTU7PB1QTsUX8KYth-orYataIf4.woff2)`, { weight: '400' }),
-    ];
     try {
-      const loaded = await Promise.all(fonts.map(f => f.load()));
-      loaded.forEach(f => document.fonts.add(f));
-    } catch (e) { console.warn('Font loading failed, falling back:', e); }
+      await Promise.all([
+        document.fonts.load("400 16px 'Playfair Display'"),
+        document.fonts.load("700 16px 'Playfair Display'"),
+        document.fonts.load("400 16px 'DM Mono'"),
+      ]);
+    } catch (_) { /* fall back gracefully */ }
     generateCard();
   };
 
@@ -1369,18 +1366,18 @@ function PicksExportCard({ show, picks, winners, displayName, willColor, shouldC
   useEffect(() => { loadFontsAndGenerate(); }, []);
 
   const loadFontsAndGenerate = async () => {
-    const GF = 'https://fonts.gstatic.com/s/';
-    const fonts = [
-      new FontFace('Playfair Display', `url(${GF}playfairdisplay/v37/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKdFvUDQ.woff2)`, { weight: '400' }),
-      new FontFace('Playfair Display', `url(${GF}playfairdisplay/v37/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKd3vUDQ.woff2)`, { weight: '700' }),
-      new FontFace('Playfair Display', `url(${GF}playfairdisplay/v37/nuFvD-vYSZviVYUb_rj3ij__anPXJzDwcbmjWBN2PKefvUDQ.woff2)`, { weight: '900' }),
-      new FontFace('DM Mono', `url(${GF}dmmono/v14/aFTU7PB1QTsUX8KYth-orYataIf4.woff2)`, { weight: '400' }),
-      new FontFace('DM Mono', `url(${GF}dmmono/v14/aFTT7PB1QTsUX8KYth-QAd2iBQ.woff2)`, { weight: '500' }),
-    ];
+    // Force the CSS-imported fonts to be fully loaded before drawing to canvas.
+    // document.fonts.load() triggers the browser to fetch & decode fonts that
+    // are declared in CSS but haven't been used in the DOM yet.
     try {
-      const loaded = await Promise.all(fonts.map(f => f.load()));
-      loaded.forEach(f => document.fonts.add(f));
-    } catch (e) { console.warn('Font loading failed, falling back:', e); }
+      await Promise.all([
+        document.fonts.load("400 16px 'Playfair Display'"),
+        document.fonts.load("700 16px 'Playfair Display'"),
+        document.fonts.load("900 16px 'Playfair Display'"),
+        document.fonts.load("400 16px 'DM Mono'"),
+        document.fonts.load("500 16px 'DM Mono'"),
+      ]);
+    } catch (_) { /* fall back gracefully */ }
     generate();
   };
 
@@ -1402,9 +1399,9 @@ function PicksExportCard({ show, picks, winners, displayName, willColor, shouldC
     const ROW_PAD      = 14;
     const ROWS_PER_COL = Math.ceil(categories.length / 2);
 
-    const F_PICK  = "13px 'Playfair Display', Georgia, serif";
-    const F_BPICK = "bold 13px 'Playfair Display', Georgia, serif";
-    const F_CAT   = "10px 'DM Mono', monospace";
+    const F_PICK  = "13px 'DM Mono', monospace";
+    const F_BPICK = "500 13px 'DM Mono', monospace";
+    const F_CAT   = "bold 10px 'Playfair Display', Georgia, serif";
     const F_LGND  = "10px 'DM Mono', monospace";
     const F_FOOT  = "10px 'DM Mono', monospace";
     const F_SCORE = "bold 13px 'Playfair Display', Georgia, serif";
