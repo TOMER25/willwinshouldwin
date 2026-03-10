@@ -2451,6 +2451,9 @@ function AddShowForm({ onSaved, allShows }) {
 // ---- Manage Shows (edit status of DB shows) ----
 function ManageShows({ dbShows, onRefresh }) {
   const [saving, setSaving] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null); // show to confirm deletion
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const updateShow = async (showId, fields) => {
     setSaving(showId);
@@ -2459,9 +2462,73 @@ function ManageShows({ dbShows, onRefresh }) {
     onRefresh();
   };
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    if (deleteTarget.status === "active") {
+      setDeleteError("Cannot delete an Active show. Set it to Upcoming or Completed first.");
+      return;
+    }
+    setDeleting(true);
+    setDeleteError("");
+    const id = deleteTarget.id;
+    try {
+      // Cascade manually: picks → winners → results_seen → categories → show
+      await supabase.from("picks").delete().eq("show_id", id);
+      await supabase.from("winners").delete().eq("show_id", id);
+      await supabase.from("results_seen").delete().eq("show_id", id);
+      await supabase.from("db_show_categories").delete().eq("show_id", id);
+      const { error } = await supabase.from("db_shows").delete().eq("id", id);
+      if (error) throw error;
+      setDeleteTarget(null);
+      onRefresh();
+    } catch (e) {
+      setDeleteError("Delete failed: " + e.message);
+    }
+    setDeleting(false);
+  };
+
   if (dbShows.length === 0) return <p className="leaderboard-note">No shows found. Use "Add Show" to create one.</p>;
 
   return (
+    <>
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div className="auth-backdrop" style={{ zIndex: 1000 }}>
+          <div className="auth-modal" style={{ maxWidth: "420px" }}>
+            <h3 className="admin-section-title" style={{ marginBottom: "0.5rem" }}>Delete Show?</h3>
+            <p style={{ marginBottom: "0.75rem", lineHeight: "1.5" }}>
+              This will permanently delete <strong>{deleteTarget.name}</strong> and all associated data:
+            </p>
+            <ul style={{ textAlign: "left", marginBottom: "1rem", paddingLeft: "1.25rem", lineHeight: "1.8", opacity: 0.8, fontSize: "0.9rem" }}>
+              <li>All user picks for this show</li>
+              <li>All winners entered</li>
+              <li>All results-seen records</li>
+              <li>All categories &amp; nominees</li>
+            </ul>
+            <p style={{ marginBottom: "1.25rem", fontSize: "0.85rem", opacity: 0.65 }}>This cannot be undone.</p>
+            {deleteError && <div className="auth-error" style={{ marginBottom: "0.75rem" }}>{deleteError}</div>}
+            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
+              <button
+                className="auth-submit"
+                style={{ background: "#8b1a1a", minWidth: "130px" }}
+                onClick={handleDeleteConfirm}
+                disabled={deleting}
+              >
+                {deleting ? "Deleting…" : "Yes, Delete"}
+              </button>
+              <button
+                className="back-btn"
+                style={{ minWidth: "100px" }}
+                onClick={() => { setDeleteTarget(null); setDeleteError(""); }}
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     <div className="manage-shows-list">
       {dbShows.map(show => (
         <div key={show.id} className="manage-show-row">
@@ -2507,6 +2574,20 @@ function ManageShows({ dbShows, onRefresh }) {
                 disabled={saving === show.id}
               >
                 {show.results_published ? "Published ✓" : "Hidden ✗"}
+              </button>
+            </div>
+
+            {/* Delete */}
+            <div className="manage-control-group">
+              <label className="manage-control-label">Delete</label>
+              <button
+                className="lifecycle-toggle toggle-off"
+                style={{ background: "transparent", border: "1px solid #8b1a1a", color: "#c0392b" }}
+                onClick={() => { setDeleteError(""); setDeleteTarget(show); }}
+                disabled={saving === show.id}
+                title={show.status === "active" ? "Cannot delete an Active show" : "Delete this show"}
+              >
+                🗑 Delete
               </button>
             </div>
           </div>
