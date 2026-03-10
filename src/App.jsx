@@ -243,9 +243,17 @@ function ShowApp({ show, user, allShows, onGoHome }) {
     document.title = `${show.name} — WillWin/ShouldWin`;
     loadPicks();
     loadAggregates();
-    if (resultsPublished) checkResultsSeen();
+    // Always fetch live results_published — the prop may be stale if
+    // results were published after the app initially loaded.
+    checkResultsLive();
     return () => { document.title = "WillWin / ShouldWin"; };
   }, [show.id]);
+
+  const checkResultsLive = async () => {
+    const { data: showRow } = await supabase
+      .from("db_shows").select("results_published").eq("id", show.id).single();
+    if (showRow?.results_published) checkResultsSeen();
+  };
 
   const loadPicks = async () => {
     const { data } = await supabase.from("picks").select("*").eq("user_id", user.id).eq("show_id", show.id);
@@ -285,16 +293,15 @@ function ShowApp({ show, user, allShows, onGoHome }) {
   };
 
   const checkResultsSeen = async () => {
-    // Load winners fresh
     const { data: winData } = await supabase.from("winners").select("*").eq("show_id", show.id);
     const winMap = {};
     (winData || []).forEach(w => { winMap[w.category_id] = w.will_win_winner; });
-    // Check if user has seen the reveal already
+    setWinners(winMap);
     const { data: seen } = await supabase.from("results_seen")
       .select("id").eq("user_id", user.id).eq("show_id", show.id).single();
-    // Set winners first, then show modal in next tick to ensure state is flushed
-    setWinners(winMap);
+    // setTimeout ensures winners state is flushed before modal renders
     if (!seen) setTimeout(() => setShowResultsModal(true), 0);
+    else setShowResultsModal(true); // "See your results" button always shows it
   };
 
   const dismissResultsModal = async () => {
@@ -582,7 +589,6 @@ function Leaderboard({ currentUserId, show }) {
       if (!isMe && vis === "private") return;
       if (!isMe && vis === "friends" && !isFriend) return;
 
-      // Always register user even if they have 0 correct picks
       if (!scoreMap[pick.user_id]) scoreMap[pick.user_id] = { will_win: 0, should_win: 0 };
       const winner = winMap[pick.category_id];
       if (!winner) return;
@@ -2644,7 +2650,12 @@ function AdminPanel({ onBack }) {
     }));
     setDbShows(shows);
     setAllShows(shows);
-    if (shows.length > 0) { setSelectedShow(shows[0]); loadWinners(shows[0].id); }
+    if (shows.length > 0) {
+      // Preserve the currently selected show if it still exists, otherwise default to first
+      const current = shows.find(s => s.id === selectedShow?.id) || shows[0];
+      setSelectedShow(current);
+      loadWinners(current.id);
+    }
   };
 
   const loadWinners = async (showId) => {
