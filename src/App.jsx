@@ -285,15 +285,16 @@ function ShowApp({ show, user, allShows, onGoHome }) {
   };
 
   const checkResultsSeen = async () => {
-    // Load winners
+    // Load winners fresh
     const { data: winData } = await supabase.from("winners").select("*").eq("show_id", show.id);
     const winMap = {};
     (winData || []).forEach(w => { winMap[w.category_id] = w.will_win_winner; });
-    setWinners(winMap);
     // Check if user has seen the reveal already
     const { data: seen } = await supabase.from("results_seen")
       .select("id").eq("user_id", user.id).eq("show_id", show.id).single();
-    if (!seen) setShowResultsModal(true);
+    // Set winners first, then show modal in next tick to ensure state is flushed
+    setWinners(winMap);
+    if (!seen) setTimeout(() => setShowResultsModal(true), 0);
   };
 
   const dismissResultsModal = async () => {
@@ -376,7 +377,7 @@ function ShowApp({ show, user, allShows, onGoHome }) {
           ballotsOpen={ballotsOpen}
           resultsPublished={resultsPublished}
           winners={winners}
-          onShowResults={() => setShowResultsModal(true)}
+          onShowResults={checkResultsSeen}
         />
       )}
       {view === "community" && <Community currentUserId={user.id} show={show} />}
@@ -581,6 +582,7 @@ function Leaderboard({ currentUserId, show }) {
       if (!isMe && vis === "private") return;
       if (!isMe && vis === "friends" && !isFriend) return;
 
+      // Always register user even if they have 0 correct picks
       if (!scoreMap[pick.user_id]) scoreMap[pick.user_id] = { will_win: 0, should_win: 0 };
       const winner = winMap[pick.category_id];
       if (!winner) return;
