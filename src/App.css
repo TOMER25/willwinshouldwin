@@ -332,9 +332,9 @@ body {
    ============================================================ */
 .leaderboard { max-width: 700px; }
 .leaderboard-note { color: var(--text-dim); font-size: 0.8rem; margin-bottom: 1.25rem; font-style: italic; font-family: 'Playfair Display', serif; }
-.lb-header, .lb-row { grid-template-columns: 32px 1fr 48px 48px 48px 5rem; gap: 0 0.75rem; }
-.lb-header { display: grid; padding: 0.45rem 0.75rem; font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); margin-bottom: 0.4rem; }
-.lb-row { display: grid; padding: 0.65rem 0.75rem; border-radius: 8px; transition: background 0.15s; align-items: center; min-height: 48px; }
+.lb-header { display: grid; grid-template-columns: 32px 1fr 48px 48px 56px 130px; padding: 0.45rem 0.75rem; font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); margin-bottom: 0.4rem; }
+.lb-header span:nth-child(n+3) { text-align: center; }
+.lb-row { display: grid; grid-template-columns: 32px 1fr 48px 48px 56px 130px; padding: 0.65rem 0.75rem; border-radius: 8px; transition: background 0.15s; align-items: center; min-height: 48px; }
 .lb-row:hover { background: var(--surface); }
 .lb-row.lb-you { background: rgba(201,168,76,0.07); border: 1px solid rgba(201,168,76,0.18); }
 .lb-rank { color: var(--text-muted); font-size: 0.75rem; }
@@ -363,7 +363,7 @@ body {
 .compare-search-wrap { max-width: 480px; }
 .compare-title { font-family: 'Playfair Display', serif; font-size: 1.2rem; font-weight: 700; color: var(--white); margin-bottom: 1rem; }
 .compare-search { margin-bottom: 0.75rem; }
-.user-list { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 1.5rem; max-height: 300px; overflow-y: auto; }
+.user-list { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 1.5rem; max-height: 400px; overflow-y: auto; }
 .user-list-item { display: flex; align-items: center; gap: 0.75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.7rem 1rem; color: var(--text); font-family: 'DM Mono', monospace; font-size: 0.82rem; cursor: pointer; transition: all 0.2s; text-align: left; width: 100%; -webkit-tap-highlight-color: transparent; }
 .user-list-item:hover { border-color: var(--gold); background: var(--gold-dim); }
 .user-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--gold-dim); border: 1px solid var(--gold); color: var(--gold); font-size: 0.8rem; font-weight: 500; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -1321,6 +1321,17 @@ body {
 
 .public-profile-wrap { max-width: 720px; margin: 0 auto; padding: 1.5rem 1rem 3rem; display: flex; flex-direction: column; gap: 1.5rem; }
 
+/* Visibility banner */
+.visibility-banner { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 1rem; border-radius: 8px; font-family: 'DM Mono', monospace; font-size: 0.75rem; border: 1px solid; margin-bottom: -0.5rem; }
+.vis-banner-public  { background: rgba(100,180,100,0.07); border-color: rgba(100,180,100,0.22); color: #7db87d; }
+.vis-banner-friends { background: rgba(100,150,220,0.07); border-color: rgba(100,150,220,0.22); color: #7aa4d8; }
+.vis-banner-private { background: rgba(180,80,80,0.07);  border-color: rgba(180,80,80,0.22);  color: #c07878; }
+.vis-banner-icon { font-size: 0.85rem; flex-shrink: 0; }
+.vis-banner-text strong { color: inherit; }
+.vis-banner-desc { color: var(--text-muted); }
+.vis-banner-edit { margin-left: auto; color: var(--gold); text-decoration: none; white-space: nowrap; font-size: 0.72rem; flex-shrink: 0; }
+.vis-banner-edit:hover { text-decoration: underline; }
+
 .public-profile-not-found { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; text-align: center; gap: 0.75rem; color: var(--text-dim); }
 .not-found-icon { font-size: 2.5rem; }
 .public-profile-not-found h3 { font-family: 'Playfair Display', serif; font-size: 1.4rem; color: var(--white); }
@@ -1394,7 +1405,7 @@ body {
 .lb-filter-btn { font-family: 'DM Mono', monospace; font-size: 0.7rem; padding: 0.25rem 0.75rem; border-radius: 6px; border: none; background: transparent; color: var(--text-dim); cursor: pointer; transition: all 0.15s; }
 .lb-filter-btn.active { background: var(--gold-dim); color: var(--gold); }
 .lb-header, .lb-row { grid-template-columns: 2.5rem 1fr 2.5rem 2.5rem 3rem 5rem; }
-.lb-follow { display: flex; justify-content: flex-end; }
+.lb-follow { display: flex; justify-content: flex-start; }
 .lb-name-link { color: inherit; text-decoration: none; transition: color 0.15s; }
 .lb-name-link:hover { color: var(--lb-color, var(--gold)); }
 
@@ -1435,4 +1446,3 @@ body {
 /* Visibility blocked on public profile */
 .visibility-blocked { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 2.5rem 1rem; text-align: center; }
 .vis-blocked-icon { font-size: 2rem; }
-
