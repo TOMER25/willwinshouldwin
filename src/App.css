@@ -74,6 +74,7 @@ body {
   box-shadow: var(--shadow);
 }
 .auth-modal .logo-text { font-size: 1.8rem; }
+.auth-modal .logo-lockup { align-items: center; }
 .auth-tabs { display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .auth-tabs button {
   flex: 1; padding: 0.65rem; background: transparent; border: none;
@@ -144,7 +145,7 @@ body {
 
 .home-content { flex: 1; padding: 2rem 1.25rem; max-width: 900px; margin: 0 auto; width: 100%; }
 
-.home-hero { margin-bottom: 3rem; padding-top: 1rem; text-align: center; }
+.home-hero { margin-bottom: 3rem; padding-top: 1rem; }
 .home-title {
   font-family: 'Playfair Display', serif;
   font-size: clamp(2rem, 6vw, 3.5rem);
@@ -155,7 +156,7 @@ body {
 .home-title-should { color: var(--crimson); }
 .home-subtitle {
   font-size: 0.88rem; color: var(--text-dim);
-  line-height: 1.7; max-width: 480px; margin: 0 auto;
+  line-height: 1.7; max-width: 480px;
 }
 
 .shows-heading {
