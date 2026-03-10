@@ -783,16 +783,18 @@ function Community({ currentUserId, show }) {
           {!compareUser ? (
             <div className="compare-search-wrap">
               <h3 className="compare-title">Find a friend to compare with</h3>
-              <input className="auth-input compare-search" placeholder="Search by username…" value={compareSearch} onChange={e => setCompareSearch(e.target.value)} />
-              <div className="user-list">
-                {filteredUsers.length === 0 && <p className="leaderboard-note">No users found.</p>}
-                {filteredUsers.map(u => (
-                  <button key={u.id} className="user-list-item" onClick={() => handleSelectUser(u)}>
-                    <span className="user-avatar">{(u.username || "?")[0].toUpperCase()}</span>
-                    <span>{u.username || "Anonymous"}</span>
-                  </button>
-                ))}
-              </div>
+              <input className="auth-input compare-search" placeholder="Search by username…" value={compareSearch} onChange={e => setCompareSearch(e.target.value)} autoFocus />
+              {compareSearch.trim().length > 0 && (
+                <div className="user-list">
+                  {filteredUsers.length === 0 && <p className="leaderboard-note">No users found.</p>}
+                  {filteredUsers.map(u => (
+                    <button key={u.id} className="user-list-item" onClick={() => handleSelectUser(u)}>
+                      <span className="user-avatar">{(u.username || "?")[0].toUpperCase()}</span>
+                      <span>{u.username || "Anonymous"}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="compare-link-section">
                 <p className="compare-link-label">Or share your profile link:</p>
                 <div className="compare-link-box">
@@ -1911,28 +1913,6 @@ function Profile({ user, picks, show }) {
             </div>
           )}
         </div>
-
-        {/* ── Visibility quick-access ── */}
-        {(() => {
-          const visConfig = {
-            public:  { icon: "🌐", label: "Public",       desc: "Anyone can see your picks" },
-            friends: { icon: "👥", label: "Friends only", desc: "Only mutual followers" },
-            private: { icon: "🔒", label: "Private",      desc: "Only you can see your picks" },
-          };
-          const cfg = visConfig[visibility] || visConfig.public;
-          return (
-            <button
-              className={`profile-vis-pill profile-vis-pill--${visibility}`}
-              onClick={() => setCustomizeOpen(true)}
-              title="Change visibility in Customize"
-            >
-              <span className="pvp-icon">{cfg.icon}</span>
-              <span className="pvp-label">{cfg.label}</span>
-              <span className="pvp-desc">{cfg.desc}</span>
-              <span className="pvp-edit">Change →</span>
-            </button>
-          );
-        })()}
 
         {/* ── Tab bar ── */}
         <div className="profile-tabs">
