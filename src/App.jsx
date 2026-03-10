@@ -243,17 +243,9 @@ function ShowApp({ show, user, allShows, onGoHome }) {
     document.title = `${show.name} — WillWin/ShouldWin`;
     loadPicks();
     loadAggregates();
-    // Always fetch live results_published — the prop may be stale if
-    // results were published after the app initially loaded.
-    checkResultsLive();
+    if (resultsPublished) checkResultsSeen();
     return () => { document.title = "WillWin / ShouldWin"; };
   }, [show.id]);
-
-  const checkResultsLive = async () => {
-    const { data: showRow } = await supabase
-      .from("db_shows").select("results_published").eq("id", show.id).single();
-    if (showRow?.results_published) checkResultsSeen();
-  };
 
   const loadPicks = async () => {
     const { data } = await supabase.from("picks").select("*").eq("user_id", user.id).eq("show_id", show.id);
@@ -293,15 +285,15 @@ function ShowApp({ show, user, allShows, onGoHome }) {
   };
 
   const checkResultsSeen = async () => {
+    // Load winners
     const { data: winData } = await supabase.from("winners").select("*").eq("show_id", show.id);
     const winMap = {};
     (winData || []).forEach(w => { winMap[w.category_id] = w.will_win_winner; });
     setWinners(winMap);
+    // Check if user has seen the reveal already
     const { data: seen } = await supabase.from("results_seen")
       .select("id").eq("user_id", user.id).eq("show_id", show.id).single();
-    // setTimeout ensures winners state is flushed before modal renders
-    if (!seen) setTimeout(() => setShowResultsModal(true), 0);
-    else setShowResultsModal(true); // "See your results" button always shows it
+    if (!seen) setShowResultsModal(true);
   };
 
   const dismissResultsModal = async () => {
@@ -384,7 +376,7 @@ function ShowApp({ show, user, allShows, onGoHome }) {
           ballotsOpen={ballotsOpen}
           resultsPublished={resultsPublished}
           winners={winners}
-          onShowResults={checkResultsSeen}
+          onShowResults={() => setShowResultsModal(true)}
         />
       )}
       {view === "community" && <Community currentUserId={user.id} show={show} />}
@@ -2676,15 +2668,20 @@ function AdminPanel({ onBack }) {
 
   const saveAll = async () => {
     setSaving(true);
+    setSaveMsg("");
     const rows = Object.entries(winners)
       .filter(([, v]) => v)
       .map(([category_id, will_win_winner]) => ({ show_id: selectedShow.id, category_id, will_win_winner }));
     if (rows.length > 0) {
-      await supabase.from("winners").upsert(rows, { onConflict: "show_id,category_id" });
+      // Delete then re-insert to avoid relying on a unique constraint for upsert
+      const { error: delError } = await supabase.from("winners").delete().eq("show_id", selectedShow.id);
+      if (delError) { setSaving(false); setSaveMsg("Error: " + delError.message); return; }
+      const { error: insError } = await supabase.from("winners").insert(rows);
+      if (insError) { setSaving(false); setSaveMsg("Error: " + insError.message); return; }
     }
     setSaving(false);
     setSaveMsg("Saved!");
-    setTimeout(() => setSaveMsg(""), 2000);
+    setTimeout(() => setSaveMsg(""), 3000);
   };
 
   if (!authed) {
