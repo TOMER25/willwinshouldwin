@@ -2601,6 +2601,7 @@ function ManageShows({ dbShows, onRefresh }) {
         <p><strong>Results Published</strong> — winners are revealed; results modal appears for all users</p>
       </div>
     </div>
+    </>
   );
 }
 
