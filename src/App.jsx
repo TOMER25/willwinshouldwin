@@ -619,7 +619,7 @@ function Leaderboard({ currentUserId, show }) {
         </p>
       )}
       <div className="leaderboard">
-        <div className="lb-header"><span>Rank</span><span>Name</span><span>★</span><span>♥</span><span>Total</span><span className="lb-col-follow" /></div>
+        <div className="lb-header"><span>Rank</span><span>Name</span><span>★</span><span>♥</span><span>Total</span><span /></div>
         {displayed.map((entry, i) => {
           const theme = COLOR_THEMES.find(t => t.id === entry.accent_color) || COLOR_THEMES[0];
           return (
@@ -637,7 +637,7 @@ function Leaderboard({ currentUserId, show }) {
               <span className="lb-score">{entry.will_win}</span>
               <span className="lb-score">{entry.should_win}</span>
               <span className="lb-total">{entry.total}</span>
-              <span className="lb-follow lb-col-follow">
+              <span className="lb-follow">
                 {!entry.isYou && (
                   <FollowButton
                     currentUserId={currentUserId}
@@ -783,24 +783,16 @@ function Community({ currentUserId, show }) {
           {!compareUser ? (
             <div className="compare-search-wrap">
               <h3 className="compare-title">Find a friend to compare with</h3>
-              <input
-                className="auth-input compare-search"
-                placeholder="Search by username…"
-                value={compareSearch}
-                onChange={e => setCompareSearch(e.target.value)}
-                autoFocus
-              />
-              {compareSearch.trim().length > 0 && (
-                <div className="user-list">
-                  {filteredUsers.length === 0 && <p className="leaderboard-note">No users found.</p>}
-                  {filteredUsers.map(u => (
-                    <button key={u.id} className="user-list-item" onClick={() => handleSelectUser(u)}>
-                      <span className="user-avatar">{(u.username || "?")[0].toUpperCase()}</span>
-                      <span>{u.username || "Anonymous"}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
+              <input className="auth-input compare-search" placeholder="Search by username…" value={compareSearch} onChange={e => setCompareSearch(e.target.value)} />
+              <div className="user-list">
+                {filteredUsers.length === 0 && <p className="leaderboard-note">No users found.</p>}
+                {filteredUsers.map(u => (
+                  <button key={u.id} className="user-list-item" onClick={() => handleSelectUser(u)}>
+                    <span className="user-avatar">{(u.username || "?")[0].toUpperCase()}</span>
+                    <span>{u.username || "Anonymous"}</span>
+                  </button>
+                ))}
+              </div>
               <div className="compare-link-section">
                 <p className="compare-link-label">Or share your profile link:</p>
                 <div className="compare-link-box">
@@ -1920,6 +1912,28 @@ function Profile({ user, picks, show }) {
           )}
         </div>
 
+        {/* ── Visibility quick-access ── */}
+        {(() => {
+          const visConfig = {
+            public:  { icon: "🌐", label: "Public",       desc: "Anyone can see your picks" },
+            friends: { icon: "👥", label: "Friends only", desc: "Only mutual followers" },
+            private: { icon: "🔒", label: "Private",      desc: "Only you can see your picks" },
+          };
+          const cfg = visConfig[visibility] || visConfig.public;
+          return (
+            <button
+              className={`profile-vis-pill profile-vis-pill--${visibility}`}
+              onClick={() => setCustomizeOpen(true)}
+              title="Change visibility in Customize"
+            >
+              <span className="pvp-icon">{cfg.icon}</span>
+              <span className="pvp-label">{cfg.label}</span>
+              <span className="pvp-desc">{cfg.desc}</span>
+              <span className="pvp-edit">Change →</span>
+            </button>
+          );
+        })()}
+
         {/* ── Tab bar ── */}
         <div className="profile-tabs">
           <button className={`profile-tab ${profileTab === "ballots" ? "active" : ""}`} onClick={() => setProfileTab("ballots")}>My Ballots</button>
@@ -2837,32 +2851,6 @@ function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, on
 
       <div className="app-main">
         <div className="public-profile-wrap">
-
-          {/* Visibility banner */}
-          {(() => {
-            const vis = profileData.picks_visibility || "public";
-            const isOwner = currentUser?.id === targetUserId;
-            const visConfig = {
-              public:  { icon: "🌐", label: "Public profile", desc: "Anyone can see these picks", cls: "vis-banner-public" },
-              friends: { icon: "👥", label: "Friends only",   desc: "Only mutual followers see the full ballot", cls: "vis-banner-friends" },
-              private: { icon: "🔒", label: "Private profile", desc: "Only the owner can see these picks", cls: "vis-banner-private" },
-            };
-            const cfg = visConfig[vis] || visConfig.public;
-            return (
-              <div className={`visibility-banner ${cfg.cls}`}>
-                <span className="vis-banner-icon">{cfg.icon}</span>
-                <span className="vis-banner-text">
-                  <strong>{cfg.label}</strong>
-                  <span className="vis-banner-desc"> · {cfg.desc}</span>
-                </span>
-                {isOwner && (
-                  <a className="vis-banner-edit" href="javascript:void(0)" onClick={() => window.history.back()}>
-                    Edit in Profile →
-                  </a>
-                )}
-              </div>
-            );
-          })()}
 
           {/* Identity card */}
           <div className="profile-card">
