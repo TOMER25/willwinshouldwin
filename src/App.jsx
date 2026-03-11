@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import { createClient } from "@supabase/supabase-js";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer,
+  LineChart, Line, Legend,
+} from "recharts";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "YOUR_SUPABASE_URL";
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "YOUR_SUPABASE_ANON_KEY";
@@ -541,12 +545,56 @@ function FollowButton({ currentUserId, targetId, onFollow }) {
   );
 }
 
+// Tiny inline sparkline (SVG, no lib needed)
+function Sparkline({ data, color }) {
+  if (!data || data.length < 2) return <span style={{ display: "inline-block", width: 60 }} />;
+  const w = 60, h = 20, pad = 2;
+  const max = Math.max(...data, 1);
+  const pts = data.map((v, i) => {
+    const x = pad + (i / (data.length - 1)) * (w - pad * 2);
+    const y = h - pad - (v / max) * (h - pad * 2);
+    return `${x},${y}`;
+  }).join(" ");
+  const last = data[data.length - 1];
+  const lastX = w - pad;
+  const lastY = h - pad - (last / max) * (h - pad * 2);
+  return (
+    <svg width={w} height={h} style={{ display: "block", flexShrink: 0 }}>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5"
+        strokeLinejoin="round" strokeLinecap="round" opacity="0.6" />
+      <circle cx={lastX} cy={lastY} r="2.5" fill={color} opacity="0.9" />
+    </svg>
+  );
+}
+
+// Custom recharts tooltip styled to match the app
+function LbTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: "var(--surface)", border: "1px solid var(--border)",
+      borderRadius: 8, padding: "8px 12px",
+      fontFamily: "'DM Mono', monospace", fontSize: "0.72rem", color: "var(--text-dim)"
+    }}>
+      <div style={{ color: "var(--gold)", marginBottom: 4, letterSpacing: "0.08em", fontSize: "0.65rem" }}>{label}</div>
+      {payload.map(p => (
+        <div key={p.name} style={{ color: p.color, marginTop: 2 }}>
+          {p.name}: <strong style={{ color: "var(--text)" }}>{p.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Leaderboard({ currentUserId, show }) {
-  const [entries, setEntries] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [entries, setEntries]           = useState([]);
+  const [loading, setLoading]           = useState(true);
   const [winnersAnnounced, setWinnersAnnounced] = useState(false);
   const [followingIds, setFollowingIds] = useState(new Set());
-  const [filterMode, setFilterMode] = useState("everyone"); // "everyone" | "friends"
+  const [filterMode, setFilterMode]     = useState("everyone"); // "everyone" | "friends"
+  const [lbTab, setLbTab]               = useState("standings"); // "standings" | "race" | "breakdown"
+  const [winMap, setWinMap]             = useState({});
+  const [picksData, setPicksData]       = useState([]); // raw picks rows
 
   useEffect(() => { loadLeaderboard(); }, [show.id]);
 
@@ -560,22 +608,26 @@ function Leaderboard({ currentUserId, show }) {
       supabase.from("follows").select("following_id").eq("follower_id", currentUserId),
     ]);
 
-    const winMap = {};
-    (winRes.data || []).forEach(w => { winMap[w.category_id] = w.will_win_winner; });
-    setWinnersAnnounced(Object.keys(winMap).length > 0);
+    const wm = {};
+    (winRes.data || []).forEach(w => { wm[w.category_id] = w.will_win_winner; });
+    setWinMap(wm);
+    setWinnersAnnounced(Object.keys(wm).length > 0);
+    setPicksData(picksRes.data || []);
 
     const fIds = new Set((followsRes.data || []).map(r => r.following_id));
-    fIds.add(currentUserId); // always include yourself
+    fIds.add(currentUserId);
     setFollowingIds(fIds);
 
     const profileMap = {};
     (profilesRes.data || []).forEach(p => { profileMap[p.id] = p; });
 
-    const scoreMap = {};
+    // Per-user, per-category correctness for sparklines + breakdown
+    const userCatMap = {}; // { uid: { catId: { will: bool, should: bool } } }
+    const scoreMap   = {}; // { uid: { will_win: n, should_win: n } }
+
     (picksRes.data || []).forEach(pick => {
       const prof = profileMap[pick.user_id];
       if (!prof) return;
-      // Visibility enforcement
       const vis = prof.picks_visibility || "public";
       const isMe = pick.user_id === currentUserId;
       const isFriend = fIds.has(pick.user_id);
@@ -583,15 +635,39 @@ function Leaderboard({ currentUserId, show }) {
       if (!isMe && vis === "friends" && !isFriend) return;
 
       if (!scoreMap[pick.user_id]) scoreMap[pick.user_id] = { will_win: 0, should_win: 0 };
-      const winner = winMap[pick.category_id];
-      if (!winner) return;
-      if (pick.will_win === winner)   scoreMap[pick.user_id].will_win++;
-      if (pick.should_win === winner) scoreMap[pick.user_id].should_win++;
+      if (!userCatMap[pick.user_id]) userCatMap[pick.user_id] = {};
+
+      const winner = wm[pick.category_id];
+      const wHit = !!winner && pick.will_win === winner;
+      const sHit = !!winner && pick.should_win === winner;
+      userCatMap[pick.user_id][pick.category_id] = { wHit, sHit };
+
+      if (wHit) scoreMap[pick.user_id].will_win++;
+      if (sHit) scoreMap[pick.user_id].should_win++;
     });
 
     const leaderboard = Object.entries(scoreMap).map(([uid, scores]) => {
       const prof = profileMap[uid] || {};
-      return { uid, name: prof.username || "Anonymous", username: prof.username, accent_color: prof.accent_color, ...scores, total: scores.will_win + scores.should_win, isYou: uid === currentUserId };
+      const theme = COLOR_THEMES.find(t => t.id === prof.accent_color) || COLOR_THEMES[0];
+      // Build sparkline: correct picks per every 4 categories (sorted by show order)
+      const catOrder = show.categories.map(c => c.id);
+      const catHits = catOrder.map(cid => {
+        const h = userCatMap[uid]?.[cid];
+        return h ? (h.wHit ? 1 : 0) + (h.sHit ? 1 : 0) : 0;
+      });
+      // Chunk into groups of ~4 for the sparkline
+      const chunkSize = Math.max(1, Math.ceil(catOrder.length / 5));
+      const sparkData = [];
+      for (let i = 0; i < catOrder.length; i += chunkSize) {
+        sparkData.push(catHits.slice(i, i + chunkSize).reduce((a, b) => a + b, 0));
+      }
+      return {
+        uid, name: prof.username || "Anonymous", username: prof.username,
+        accent_color: prof.accent_color, color: theme.will,
+        ...scores, total: scores.will_win + scores.should_win,
+        isYou: uid === currentUserId,
+        sparkData, catMap: userCatMap[uid] || {},
+      };
     }).sort((a, b) => b.total - a.total || b.will_win - a.will_win);
 
     setEntries(leaderboard);
@@ -604,8 +680,55 @@ function Leaderboard({ currentUserId, show }) {
     ? entries.filter(e => followingIds.has(e.uid))
     : entries;
 
+  // ── Chart data ──
+
+  // Bar chart: top 8 by total
+  const barData = displayed.slice(0, 8).map(e => ({
+    name: (e.name || "?").slice(0, 9),
+    "★ Will Win": e.will_win,
+    "♥ Should Win": e.should_win,
+    color: e.color,
+    isYou: e.isYou,
+  }));
+
+  // Breakdown: per-category accuracy for top 3 + current user
+  const topUids = new Set(displayed.slice(0, 3).map(e => e.uid));
+  topUids.add(currentUserId);
+  const breakdownPlayers = displayed.filter(e => topUids.has(e.uid)).slice(0, 4);
+
+  const breakdownData = show.categories.map(cat => {
+    const row = { cat: cat.name.length > 14 ? cat.name.slice(0, 13) + "…" : cat.name };
+    breakdownPlayers.forEach(p => {
+      const h = p.catMap[cat.id];
+      row[p.name] = h ? (h.wHit ? 1 : 0) + (h.sHit ? 1 : 0) : 0;
+    });
+    return row;
+  });
+
+  // Race: cumulative scores per category (in show order) for top 3 + you
+  const racePlayers = breakdownPlayers;
+  let raceCumulative = racePlayers.map(() => 0);
+  const raceData = show.categories.map((cat, idx) => {
+    const point = { cat: cat.name.length > 10 ? cat.name.slice(0, 9) + "…" : cat.name };
+    racePlayers.forEach((p, pi) => {
+      const h = p.catMap[cat.id];
+      if (h) raceCumulative[pi] += (h.wHit ? 1 : 0) + (h.sHit ? 1 : 0);
+      point[p.name] = raceCumulative[pi];
+    });
+    return point;
+  });
+
+  // Recharts dynamic import via window (recharts is available as a global in the build env,
+  // but here we reference it via the import at top of file — see note below)
+  // We use inline SVG bar for the standings tab to avoid a recharts dep concern,
+  // but recharts IS available via npm in the Vite project, so we import at top.
+
+  const GOLD = "var(--gold)";
+  const totalCats = show.categories.length;
+
   return (
     <div className="app-main">
+      {/* ── Header row: title + Everyone/Friends filter ── */}
       <div className="lb-top-row">
         <h2 className="section-title" style={{ margin: 0 }}>Leaderboard</h2>
         <div className="lb-filter-tabs">
@@ -613,45 +736,225 @@ function Leaderboard({ currentUserId, show }) {
           <button className={`lb-filter-btn ${filterMode === "friends"  ? "active" : ""}`} onClick={() => setFilterMode("friends")}>Friends</button>
         </div>
       </div>
-      {!winnersAnnounced && <p className="leaderboard-note">Scores populate after the ceremony on {show.date}. Make your picks now!</p>}
-      {displayed.length === 0 && (
-        <p className="leaderboard-note">
-          {filterMode === "friends" ? "Follow people to see them here." : "No picks yet — be the first!"}
-        </p>
-      )}
-      <div className="leaderboard">
-        <div className="lb-header"><span>Rank</span><span>Name</span><span>★</span><span>♥</span><span>Total</span><span /></div>
-        {displayed.map((entry, i) => {
-          const theme = COLOR_THEMES.find(t => t.id === entry.accent_color) || COLOR_THEMES[0];
-          return (
-            <div key={entry.uid} className={`lb-row ${entry.isYou ? "lb-you" : ""}`}>
-              <span className="lb-rank">#{i + 1}</span>
-              <span className="lb-name">
-                {entry.username ? (
-                  <a href={`/?u=${entry.username}`} target="_blank" rel="noreferrer" className="lb-name-link"
-                     style={{ "--lb-color": theme.will }}>
-                    {entry.name}
-                  </a>
-                ) : entry.name}
-                {entry.isYou && <em> (you)</em>}
-              </span>
-              <span className="lb-score">{entry.will_win}</span>
-              <span className="lb-score">{entry.should_win}</span>
-              <span className="lb-total">{entry.total}</span>
-              <span className="lb-follow">
-                {!entry.isYou && (
-                  <FollowButton
-                    currentUserId={currentUserId}
-                    targetId={entry.uid}
-                    onFollow={() => setFollowingIds(prev => new Set([...prev, entry.uid]))}
-                  />
-                )}
-              </span>
-            </div>
-          );
-        })}
+
+      {/* ── Chart tab bar ── */}
+      <div className="lb-chart-tabs">
+        {[["standings","Standings"],["race","Score Race"],["breakdown","By Category"]].map(([id, label]) => (
+          <button key={id} className={`lb-chart-tab${lbTab === id ? " active" : ""}`}
+            onClick={() => setLbTab(id)}>{label}</button>
+        ))}
       </div>
+
+      {!winnersAnnounced && (
+        <p className="leaderboard-note">Scores populate after the ceremony on {show.date}. Make your picks now!</p>
+      )}
+
+      {/* ════════════════════════════════════════
+          TAB: STANDINGS — bar chart + table
+          ════════════════════════════════════════ */}
+      {lbTab === "standings" && (
+        <>
+          {/* Bar chart — only when results are available */}
+          {winnersAnnounced && displayed.length > 0 && (
+            <div className="lb-chart-card">
+              <p className="lb-chart-label">Top scores — ★ Will Win + ♥ Should Win</p>
+              <LbBarChart data={barData} />
+            </div>
+          )}
+
+          {/* Table */}
+          {displayed.length === 0 ? (
+            <p className="leaderboard-note">
+              {filterMode === "friends" ? "Follow people to see them here." : "No picks yet — be the first!"}
+            </p>
+          ) : (
+            <div className="leaderboard">
+              <div className="lb-header lb-header-v2">
+                <span>#</span><span>Name</span>
+                {winnersAnnounced && <span className="lb-spark-header">Trend</span>}
+                <span>★</span><span>♥</span><span>Total</span><span />
+              </div>
+              {displayed.map((entry, i) => {
+                const theme = COLOR_THEMES.find(t => t.id === entry.accent_color) || COLOR_THEMES[0];
+                return (
+                  <div key={entry.uid} className={`lb-row lb-row-v2 ${entry.isYou ? "lb-you" : ""}`}>
+                    <span className="lb-rank">#{i + 1}</span>
+                    <span className="lb-name">
+                      {entry.username ? (
+                        <a href={`/?u=${entry.username}`} target="_blank" rel="noreferrer" className="lb-name-link"
+                           style={{ "--lb-color": theme.will }}>
+                          {entry.name}
+                        </a>
+                      ) : entry.name}
+                      {entry.isYou && <em> (you)</em>}
+                    </span>
+                    {winnersAnnounced && (
+                      <span className="lb-spark">
+                        <Sparkline data={entry.sparkData} color={entry.color} />
+                      </span>
+                    )}
+                    <span className="lb-score">{entry.will_win}</span>
+                    <span className="lb-score">{entry.should_win}</span>
+                    <span className="lb-total">{entry.total}</span>
+                    <span className="lb-follow">
+                      {!entry.isYou && (
+                        <FollowButton
+                          currentUserId={currentUserId}
+                          targetId={entry.uid}
+                          onFollow={() => setFollowingIds(prev => new Set([...prev, entry.uid]))}
+                        />
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ════════════════════════════════════════
+          TAB: SCORE RACE — cumulative line chart
+          ════════════════════════════════════════ */}
+      {lbTab === "race" && (
+        <div>
+          {!winnersAnnounced ? (
+            <p className="leaderboard-note">The score race will appear once results are published.</p>
+          ) : racePlayers.length === 0 ? (
+            <p className="leaderboard-note">No scores to chart yet.</p>
+          ) : (
+            <>
+              <p className="lb-chart-label lb-chart-label-top">Cumulative correct picks — category by category</p>
+              <div className="lb-chart-card lb-chart-card-tall">
+                <LbLineChart data={raceData} players={racePlayers} />
+              </div>
+              {/* Mini final-standings recap */}
+              <div className="lb-race-recap">
+                {racePlayers.map((p, i) => (
+                  <div key={p.uid} className={`lb-race-row${p.isYou ? " lb-you-race" : ""}`}>
+                    <span className="lb-race-rank">#{i + 1}</span>
+                    <span className="lb-race-dot" style={{ background: p.color }} />
+                    <span className="lb-race-name">{p.name}{p.isYou ? " (you)" : ""}</span>
+                    <span className="lb-race-score" style={{ color: p.color }}>{p.total}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════
+          TAB: BREAKDOWN — per-category bars + radar
+          ════════════════════════════════════════ */}
+      {lbTab === "breakdown" && (
+        <div>
+          {!winnersAnnounced ? (
+            <p className="leaderboard-note">Category breakdown will appear once results are published.</p>
+          ) : breakdownPlayers.length === 0 ? (
+            <p className="leaderboard-note">No data yet.</p>
+          ) : (
+            <>
+              <p className="lb-chart-label lb-chart-label-top">Correct picks by category — top 3 + you</p>
+
+              {/* Horizontal bar chart per category */}
+              <div className="lb-chart-card lb-chart-card-breakdown">
+                <LbBreakdownChart data={breakdownData} players={breakdownPlayers} />
+              </div>
+
+              {/* Player summary pills */}
+              <div className="lb-breakdown-legend">
+                {breakdownPlayers.map(p => (
+                  <div key={p.uid} className={`lb-legend-pill${p.isYou ? " you" : ""}`}>
+                    <span className="lb-legend-dot" style={{ background: p.color }} />
+                    <span className="lb-legend-name">{p.name}{p.isYou ? " ★" : ""}</span>
+                    <span className="lb-legend-score" style={{ color: p.color }}>{p.total}/{totalCats * 2}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+// ── Chart sub-components (use recharts imported at top of file) ──
+// These are separate so Leaderboard stays readable.
+// recharts must be installed: npm install recharts
+
+function LbBarChart({ data }) {
+
+  return (
+    <ResponsiveContainer width="100%" height={180}>
+      <BarChart data={data} margin={{ top: 18, right: 8, left: -28, bottom: 0 }} barCategoryGap="22%">
+        <XAxis dataKey="name"
+          tick={{ fill: "var(--text-muted)", fontSize: 9, fontFamily: "'DM Mono', monospace" }}
+          axisLine={false} tickLine={false} />
+        <YAxis tick={{ fill: "var(--text-muted)", fontSize: 9 }} axisLine={false} tickLine={false} />
+        <Tooltip content={<LbTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+        <Bar dataKey="★ Will Win" stackId="a" radius={[0,0,0,0]}>
+          {data.map((entry, i) => (
+            <Cell key={i} fill={entry.color} opacity={entry.isYou ? 1 : 0.55} />
+          ))}
+        </Bar>
+        <Bar dataKey="♥ Should Win" stackId="a" radius={[3,3,0,0]}>
+          {data.map((entry, i) => (
+            <Cell key={i} fill={entry.color} opacity={entry.isYou ? 0.5 : 0.28} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function LbLineChart({ data, players }) {
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <LineChart data={data} margin={{ top: 8, right: 16, left: -24, bottom: 0 }}>
+        <XAxis dataKey="cat"
+          tick={{ fill: "var(--text-muted)", fontSize: 9, fontFamily: "'DM Mono', monospace" }}
+          axisLine={{ stroke: "var(--border)" }} tickLine={false} />
+        <YAxis tick={{ fill: "var(--text-muted)", fontSize: 9 }} axisLine={false} tickLine={false} />
+        <Tooltip content={<LbTooltip />} />
+        <Legend wrapperStyle={{
+          fontFamily: "'DM Mono', monospace", fontSize: 9,
+          letterSpacing: 1, paddingTop: 12, color: "var(--text-muted)"
+        }} />
+        {players.map(p => (
+          <Line key={p.uid} type="monotone" dataKey={p.name}
+            stroke={p.color} strokeWidth={p.isYou ? 2.5 : 1.5}
+            dot={{ r: 2.5, fill: p.color, strokeWidth: 0 }}
+            activeDot={{ r: 5 }} />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+function LbBreakdownChart({ data, players }) {
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(200, data.length * 28 + 40)}>
+      <BarChart data={data} layout="vertical"
+        margin={{ top: 4, right: 24, left: 8, bottom: 0 }}
+        barCategoryGap="20%" barGap={2}>
+        <XAxis type="number" domain={[0, 2]} ticks={[0,1,2]}
+          tick={{ fill: "var(--text-muted)", fontSize: 9 }} axisLine={false} tickLine={false} />
+        <YAxis dataKey="cat" type="category" width={96}
+          tick={{ fill: "var(--text-dim)", fontSize: 9, fontFamily: "'DM Mono', monospace" }}
+          axisLine={false} tickLine={false} />
+        <Tooltip content={<LbTooltip />} cursor={{ fill: "rgba(255,255,255,0.02)" }} />
+        <Legend wrapperStyle={{
+          fontFamily: "'DM Mono', monospace", fontSize: 9,
+          letterSpacing: 1, paddingTop: 8, color: "var(--text-muted)"
+        }} />
+        {players.map(p => (
+          <Bar key={p.uid} dataKey={p.name} fill={p.color}
+            opacity={p.isYou ? 0.9 : 0.6} radius={[0,3,3,0]} />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
   );
 }
 
