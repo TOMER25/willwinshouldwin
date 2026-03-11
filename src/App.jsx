@@ -1697,6 +1697,8 @@ function Profile({ user, picks, show }) {
   const [savingUsername, setSavingUsername] = useState(false);
   const [usernameSaved, setUsernameSaved] = useState(false);
   const [visibility, setVisibility] = useState("public");
+  const [favCategories, setFavCategories] = useState([]); // array of category ids
+  const [editingFavCats, setEditingFavCats] = useState(false);
   const [following, setFollowing] = useState([]);   // [{ id, username, display_name, accent_color }]
   const [followers, setFollowers] = useState([]);   // [{ id, username, display_name, accent_color }]
   const [profileTab, setProfileTab] = useState("ballots"); // "ballots" | "friends"
@@ -1751,13 +1753,14 @@ function Profile({ user, picks, show }) {
 
   const loadProfile = async () => {
     const { data } = await supabase.from("profiles")
-      .select("accent_color, favorite_movie, favorite_movie_poster, username, picks_visibility")
+      .select("accent_color, favorite_movie, favorite_movie_poster, username, picks_visibility, favorite_categories")
       .eq("id", user.id).single();
     if (data) {
       setProfileData(data);
       applyTheme(data.accent_color || "gold");
       if (data.username) { setUsername(data.username); setUsernameDraft(data.username); }
       if (data.picks_visibility) setVisibility(data.picks_visibility);
+      if (data.favorite_categories) setFavCategories(data.favorite_categories);
     }
     loadFollows();
   };
@@ -1789,6 +1792,11 @@ function Profile({ user, picks, show }) {
   const saveVisibility = async (val) => {
     setVisibility(val);
     await supabase.from("profiles").update({ picks_visibility: val }).eq("id", user.id);
+  };
+
+  const saveFavCategories = async (cats) => {
+    setFavCategories(cats);
+    await supabase.from("profiles").update({ favorite_categories: cats }).eq("id", user.id);
   };
 
   const unfollow = async (targetId) => {
@@ -1872,12 +1880,33 @@ function Profile({ user, picks, show }) {
   // Per-show ballot stats — recomputes whenever allShows or allPicksByShow changes
   const showStats = allShows.map(s => {
     const showPicks = allPicksByShow[s.id] || {};
+    const showWinners = s.id === show.id ? winners : {};
     const total = s.categories.length;
     const willPicked = s.categories.filter(c => showPicks[c.id]?.will_win).length;
     const shouldPicked = s.categories.filter(c => showPicks[c.id]?.should_win).length;
     const bothPicked = s.categories.filter(c => showPicks[c.id]?.will_win && showPicks[c.id]?.should_win).length;
-    return { show: s, total, willPicked, shouldPicked, bothPicked };
+    const withWinners = s.categories.filter(c => showWinners[c.id]);
+    const willCorrect = withWinners.filter(c => showPicks[c.id]?.will_win === showWinners[c.id]).length;
+    const shouldCorrect = withWinners.filter(c => showPicks[c.id]?.should_win === showWinners[c.id]).length;
+    return { show: s, total, willPicked, shouldPicked, bothPicked, willCorrect, shouldCorrect, graded: withWinners.length };
   });
+
+  // Aggregate accuracy stats across all graded shows
+  const gradedShows = showStats.filter(s => s.graded > 0);
+  const totalGraded = gradedShows.reduce((sum, s) => sum + s.graded, 0);
+  const totalWillCorrect = gradedShows.reduce((sum, s) => sum + s.willCorrect, 0);
+  const totalShouldCorrect = gradedShows.reduce((sum, s) => sum + s.shouldCorrect, 0);
+  const overallWillPct = totalGraded > 0 ? Math.round((totalWillCorrect / totalGraded) * 100) : null;
+  const overallShouldPct = totalGraded > 0 ? Math.round((totalShouldCorrect / totalGraded) * 100) : null;
+  const totalPickedShows = showStats.filter(s => s.bothPicked > 0).length;
+
+  // Best show: highest combined correct picks (min 1 graded)
+  const bestShow = gradedShows.reduce((best, s) => {
+    if (!best) return s;
+    const sPct = (s.willCorrect + s.shouldCorrect) / (s.graded * 2);
+    const bPct = (best.willCorrect + best.shouldCorrect) / (best.graded * 2);
+    return sPct > bPct ? s : best;
+  }, null);
 
   // Current show accuracy (post-ceremony)
   const categories = show.categories;
@@ -1906,6 +1935,22 @@ function Profile({ user, picks, show }) {
             {profileData.favorite_movie && (
               <p className="profile-fav-movie">❤ {profileData.favorite_movie}</p>
             )}
+            {/* Fav categories tags */}
+            {favCategories.length > 0 && (
+              <div className="fav-cats-display">
+                {favCategories.map(catId => {
+                  const cat = show.categories.find(c => c.id === catId) || allShows.flatMap(s => s.categories).find(c => c.id === catId);
+                  return cat ? <span key={catId} className="fav-cat-tag">{cat.name}</span> : null;
+                })}
+              </div>
+            )}
+            <button
+              className={`profile-vis-pill profile-vis-pill--${visibility}`}
+              onClick={() => { setCustomizeOpen(true); setTimeout(() => document.querySelector('.customize-toggle')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); }}
+              title="Change visibility"
+            >
+              {{ public: "🌐 Public", friends: "👥 Friends only", private: "🔒 Private" }[visibility]}
+            </button>
           </div>
           {profileData.favorite_movie_poster && (
             <div className="profile-poster-wrap">
@@ -1913,6 +1958,36 @@ function Profile({ user, picks, show }) {
             </div>
           )}
         </div>
+
+        {/* ── Stats strip ── */}
+        {(overallWillPct !== null || totalPickedShows > 0) && (
+          <div className="profile-stats-strip">
+            {totalPickedShows > 0 && (
+              <div className="pss-item">
+                <span className="pss-num">{totalPickedShows}</span>
+                <span className="pss-label">Show{totalPickedShows !== 1 ? "s" : ""} entered</span>
+              </div>
+            )}
+            {overallWillPct !== null && (
+              <div className="pss-item">
+                <span className="pss-num" style={{ color: "var(--gold-light)" }}>{overallWillPct}%</span>
+                <span className="pss-label">★ accuracy</span>
+              </div>
+            )}
+            {overallShouldPct !== null && (
+              <div className="pss-item">
+                <span className="pss-num" style={{ color: "var(--crimson)" }}>{overallShouldPct}%</span>
+                <span className="pss-label">♥ accuracy</span>
+              </div>
+            )}
+            {bestShow && (
+              <div className="pss-item pss-best">
+                <span className="pss-num">🏆</span>
+                <span className="pss-label">{bestShow.show.shortName || bestShow.show.name}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Tab bar ── */}
         <div className="profile-tabs">
@@ -1936,12 +2011,14 @@ function Profile({ user, picks, show }) {
               <div className="friends-list">
                 {following.map(f => {
                   const theme = COLOR_THEMES.find(t => t.id === f.accent_color) || COLOR_THEMES[0];
+                  const isMutual = followers.some(fw => fw.id === f.id);
                   return (
                     <div key={f.id} className="friend-row">
                       <div className="friend-avatar" style={{ background: `linear-gradient(135deg, ${theme.will}, ${theme.should})` }}>
                         {(f.username || "?")[0].toUpperCase()}
                       </div>
                       <span className="friend-name">{f.username || "Anonymous"}</span>
+                      {isMutual && <span className="mutual-tag">↔ Mutual</span>}
                       <div className="friend-actions">
                         {f.username && (
                           <a className="friend-profile-link" href={`/?u=${f.username}`} target="_blank" rel="noreferrer">Profile ↗</a>
@@ -1994,17 +2071,21 @@ function Profile({ user, picks, show }) {
           {showStats.length === 0 && (
             <p className="profile-no-shows">No shows available yet.</p>
           )}
-          {showStats.map(({ show: s, total, willPicked, shouldPicked, bothPicked }) => {
+          {showStats.map(({ show: s, total, willPicked, shouldPicked, bothPicked, willCorrect, shouldCorrect, graded }) => {
             const pct = total > 0 ? Math.round((bothPicked / total) * 100) : 0;
             const isCurrentShow = s.id === show.id;
             const isExporting = exportingShow === s.id;
+            const isBestShow = bestShow?.show.id === s.id;
             const theme = COLOR_THEMES.find(t => t.id === (profileData.accent_color || "gold")) || COLOR_THEMES[0];
             const showWinners = isCurrentShow ? winners : {};
             const showPicks = allPicksByShow[s.id] || {};
             return (
-              <div key={s.id} className={`show-ballot-row ${isCurrentShow ? "current-show" : ""}`}>
+              <div key={s.id} className={`show-ballot-row ${isCurrentShow ? "current-show" : ""} ${isBestShow ? "best-show" : ""}`}>
                 <div className="show-ballot-top">
-                  <span className="show-ballot-name">{s.name}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <span className="show-ballot-name">{s.name}</span>
+                    {isBestShow && <span className="best-show-badge">🏆 Best</span>}
+                  </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                     <span className="show-ballot-pct">{pct}%</span>
                     {bothPicked > 0 && (
@@ -2027,6 +2108,12 @@ function Profile({ user, picks, show }) {
                   <span className="sbc-should">♥ {shouldPicked}/{total}</span>
                   <span className="sbc-divider">·</span>
                   <span className="sbc-both">Both {bothPicked}/{total}</span>
+                  {graded > 0 && <>
+                    <span className="sbc-divider">·</span>
+                    <span className="sbc-will" style={{ color: theme.will }}>★ {willCorrect}/{graded} correct</span>
+                    <span className="sbc-divider">·</span>
+                    <span className="sbc-should" style={{ color: theme.should }}>♥ {shouldCorrect}/{graded} matched</span>
+                  </>}
                 </div>
                 {isExporting && (
                   <div className="export-card-container">
@@ -2173,6 +2260,53 @@ function Profile({ user, picks, show }) {
                     </span>
                     <button className="fav-movie-edit-btn" onClick={() => { setMovieDraft(profileData.favorite_movie || ""); setEditingMovie(true); }}>
                       {profileData.favorite_movie ? "Change" : "Add"}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Favorite categories */}
+              <div className="fav-movie-section">
+                <p className="theme-label">Favourite categories</p>
+                <p className="username-hint">Shown on your profile. Pick up to 5 categories you care most about.</p>
+                {editingFavCats ? (
+                  <div className="fav-cats-editor">
+                    {allShows.flatMap(s => s.categories).reduce((acc, cat) => {
+                      if (!acc.find(c => c.id === cat.id)) acc.push(cat);
+                      return acc;
+                    }, []).map(cat => {
+                      const selected = favCategories.includes(cat.id);
+                      return (
+                        <button
+                          key={cat.id}
+                          className={`fav-cat-option ${selected ? "selected" : ""}`}
+                          onClick={() => {
+                            if (selected) {
+                              saveFavCategories(favCategories.filter(id => id !== cat.id));
+                            } else if (favCategories.length < 5) {
+                              saveFavCategories([...favCategories, cat.id]);
+                            }
+                          }}
+                        >
+                          {cat.name}
+                        </button>
+                      );
+                    })}
+                    <button className="back-btn" style={{ marginTop: "0.75rem" }} onClick={() => setEditingFavCats(false)}>Done</button>
+                  </div>
+                ) : (
+                  <div className="fav-movie-display">
+                    <span className="fav-movie-value">
+                      {favCategories.length === 0
+                        ? <em className="fav-movie-empty">None selected</em>
+                        : favCategories.map(id => {
+                            const cat = allShows.flatMap(s => s.categories).find(c => c.id === id);
+                            return cat?.name;
+                          }).filter(Boolean).join(", ")
+                      }
+                    </span>
+                    <button className="fav-movie-edit-btn" onClick={() => setEditingFavCats(true)}>
+                      {favCategories.length === 0 ? "Add" : "Edit"}
                     </button>
                   </div>
                 )}
@@ -2799,7 +2933,7 @@ function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, on
     // Load profile
     const { data: prof } = await supabase
       .from("profiles")
-      .select("id, accent_color, favorite_movie, favorite_movie_poster, username, picks_visibility")
+      .select("id, accent_color, favorite_movie, favorite_movie_poster, username, picks_visibility, favorite_categories")
       .eq("id", targetUserId)
       .single();
 
@@ -2905,6 +3039,21 @@ function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, on
     return { show, total, willPicked, shouldPicked, bothPicked, willCorrect, shouldCorrect, graded: withWinners.length };
   }).filter(s => s.bothPicked > 0);
 
+  // Aggregate stats for public profile
+  const pubGradedShows = showStats.filter(s => s.graded > 0);
+  const pubTotalGraded = pubGradedShows.reduce((sum, s) => sum + s.graded, 0);
+  const pubTotalWillCorrect = pubGradedShows.reduce((sum, s) => sum + s.willCorrect, 0);
+  const pubTotalShouldCorrect = pubGradedShows.reduce((sum, s) => sum + s.shouldCorrect, 0);
+  const pubOverallWillPct = pubTotalGraded > 0 ? Math.round((pubTotalWillCorrect / pubTotalGraded) * 100) : null;
+  const pubOverallShouldPct = pubTotalGraded > 0 ? Math.round((pubTotalShouldCorrect / pubTotalGraded) * 100) : null;
+  const pubBestShow = pubGradedShows.reduce((best, s) => {
+    if (!best) return s;
+    const sPct = (s.willCorrect + s.shouldCorrect) / (s.graded * 2);
+    const bPct = (best.willCorrect + best.shouldCorrect) / (best.graded * 2);
+    return sPct > bPct ? s : best;
+  }, null);
+  const favCats = profileData?.favorite_categories || [];
+
   return (
     <div className="app">
       <header className="app-header">
@@ -2939,6 +3088,14 @@ function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, on
               {profileData.favorite_movie && (
                 <p className="profile-fav-movie">❤ {profileData.favorite_movie}</p>
               )}
+              {favCats.length > 0 && (
+                <div className="fav-cats-display">
+                  {favCats.map(catId => {
+                    const cat = allShows.flatMap(s => s.categories).find(c => c.id === catId);
+                    return cat ? <span key={catId} className="fav-cat-tag">{cat.name}</span> : null;
+                  })}
+                </div>
+              )}
             </div>
             {profileData.favorite_movie_poster && (
               <div className="profile-poster-wrap">
@@ -2946,6 +3103,36 @@ function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, on
               </div>
             )}
           </div>
+
+          {/* Stats strip */}
+          {(pubOverallWillPct !== null || showStats.length > 0) && (
+            <div className="profile-stats-strip">
+              {showStats.length > 0 && (
+                <div className="pss-item">
+                  <span className="pss-num">{showStats.length}</span>
+                  <span className="pss-label">Show{showStats.length !== 1 ? "s" : ""} entered</span>
+                </div>
+              )}
+              {pubOverallWillPct !== null && (
+                <div className="pss-item">
+                  <span className="pss-num" style={{ color: theme.will }}>{pubOverallWillPct}%</span>
+                  <span className="pss-label">★ accuracy</span>
+                </div>
+              )}
+              {pubOverallShouldPct !== null && (
+                <div className="pss-item">
+                  <span className="pss-num" style={{ color: theme.should }}>{pubOverallShouldPct}%</span>
+                  <span className="pss-label">♥ accuracy</span>
+                </div>
+              )}
+              {pubBestShow && (
+                <div className="pss-item pss-best">
+                  <span className="pss-num">🏆</span>
+                  <span className="pss-label">{pubBestShow.show.shortName || pubBestShow.show.name}</span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Share link */}
           <div className="public-share-row">
@@ -2971,9 +3158,12 @@ function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, on
             </div>
           ) : (
             showStats.map(({ show, total, willPicked, shouldPicked, bothPicked, willCorrect, shouldCorrect, graded }) => (
-              <div key={show.id} className="public-show-section">
+              <div key={show.id} className={`public-show-section ${pubBestShow?.show.id === show.id ? "best-show" : ""}`}>
                 <div className="public-show-header">
-                  <span className="public-show-name">{show.name}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <span className="public-show-name">{show.name}</span>
+                    {pubBestShow?.show.id === show.id && <span className="best-show-badge">🏆 Best</span>}
+                  </div>
                   {graded > 0 && (
                     <span className="public-show-scores">
                       <span style={{ color: theme.will }}>★ {willCorrect}/{graded}</span>
