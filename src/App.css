@@ -1669,3 +1669,18 @@ body {
   gap: 0.4rem;
   flex-shrink: 0;
 }
+
+/* Fav categories block with label */
+.fav-cats-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+}
+.fav-cats-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}

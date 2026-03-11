@@ -1939,11 +1939,14 @@ function Profile({ user, picks, show }) {
             )}
             {/* Fav categories tags */}
             {favCategories.length > 0 && (
-              <div className="fav-cats-display">
-                {favCategories.map(catId => {
-                  const cat = show.categories.find(c => c.id === catId) || allShows.flatMap(s => s.categories).find(c => c.id === catId);
-                  return cat ? <span key={catId} className="fav-cat-tag">{cat.name}</span> : null;
-                })}
+              <div className="fav-cats-block">
+                <span className="fav-cats-label">Favourite categories</span>
+                <div className="fav-cats-display">
+                  {favCategories.map(catId => {
+                    const cat = show.categories.find(c => c.id === catId) || allShows.flatMap(s => s.categories).find(c => c.id === catId);
+                    return cat ? <span key={catId} className="fav-cat-tag">{cat.name}</span> : null;
+                  })}
+                </div>
               </div>
             )}
           </div>
@@ -3104,11 +3107,14 @@ function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, on
                 <p className="profile-fav-movie">❤ {profileData.favorite_movie}</p>
               )}
               {favCats.length > 0 && (
-                <div className="fav-cats-display">
-                  {favCats.map(catId => {
-                    const cat = allShows.flatMap(s => s.categories).find(c => c.id === catId);
-                    return cat ? <span key={catId} className="fav-cat-tag">{cat.name}</span> : null;
-                  })}
+                <div className="fav-cats-block">
+                  <span className="fav-cats-label">Favourite categories</span>
+                  <div className="fav-cats-display">
+                    {favCats.map(catId => {
+                      const cat = allShows.flatMap(s => s.categories).find(c => c.id === catId);
+                      return cat ? <span key={catId} className="fav-cat-tag">{cat.name}</span> : null;
+                    })}
+                  </div>
                 </div>
               )}
             </div>
