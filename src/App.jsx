@@ -1702,7 +1702,8 @@ function Profile({ user, picks, show }) {
   const [editingFavCats, setEditingFavCats] = useState(false);
   const [following, setFollowing] = useState([]);   // [{ id, username, display_name, accent_color }]
   const [followers, setFollowers] = useState([]);   // [{ id, username, display_name, accent_color }]
-  const [profileTab, setProfileTab] = useState("ballots"); // "ballots" | "friends"
+  const [colBallotsOpen, setColBallotsOpen] = useState(false);
+  const [colFriendsOpen, setColFriendsOpen] = useState(false);
   const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "Friend";
 
   const memberSince = user.created_at
@@ -1997,136 +1998,153 @@ function Profile({ user, picks, show }) {
 
           {/* Left: Ballots */}
           <div className="profile-col profile-col--ballots">
-          <div className="profile-all-shows">
-          <p className="profile-section-label">My Ballots</p>
-          {showStats.length === 0 && (
-            <p className="profile-no-shows">No shows available yet.</p>
-          )}
-          {showStats.map(({ show: s, total, willPicked, shouldPicked, bothPicked, willCorrect, shouldCorrect, graded }) => {
-            const pct = total > 0 ? Math.round((bothPicked / total) * 100) : 0;
-            const isCurrentShow = s.id === show.id;
-            const isExporting = exportingShow === s.id;
-            const isBestShow = bestShow?.show.id === s.id;
-            const theme = COLOR_THEMES.find(t => t.id === (profileData.accent_color || "gold")) || COLOR_THEMES[0];
-            const showWinners = isCurrentShow ? winners : {};
-            const showPicks = allPicksByShow[s.id] || {};
-            return (
-              <div key={s.id} className={`show-ballot-row ${isCurrentShow ? "current-show" : ""} ${isBestShow ? "best-show" : ""}`}>
-                <div className="show-ballot-top">
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <span className="show-ballot-name">{s.name}</span>
-                    {isBestShow && <span className="best-show-badge">🏆 Best</span>}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                    <span className="show-ballot-pct">{pct}%</span>
-                    {bothPicked > 0 && (
-                      <button
-                        className="export-picks-btn"
-                        onClick={() => setExportingShow(isExporting ? null : s.id)}
-                        title="Export ballot as image"
-                      >
-                        {isExporting ? "Close" : "Share ↗"}
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="show-ballot-bar-track">
-                  <div className="show-ballot-bar-fill" style={{ width: `${pct}%` }} />
-                </div>
-                <div className="show-ballot-counts">
-                  <span className="sbc-will">★ {willPicked}/{total}</span>
-                  <span className="sbc-divider">·</span>
-                  <span className="sbc-should">♥ {shouldPicked}/{total}</span>
-                  <span className="sbc-divider">·</span>
-                  <span className="sbc-both">Both {bothPicked}/{total}</span>
-                  {graded > 0 && <>
-                    <span className="sbc-divider">·</span>
-                    <span className="sbc-will" style={{ color: theme.will }}>★ {willCorrect}/{graded} correct</span>
-                    <span className="sbc-divider">·</span>
-                    <span className="sbc-should" style={{ color: theme.should }}>♥ {shouldCorrect}/{graded} matched</span>
-                  </>}
-                </div>
-                {isExporting && (
-                  <div className="export-card-container">
-                    <PicksExportCard
-                      show={s}
-                      picks={showPicks}
-                      winners={showWinners}
-                      displayName={displayName}
-                      willColor={theme.will}
-                      shouldColor={theme.should}
-                      onClose={() => setExportingShow(null)}
-                    />
-                  </div>
+            <button className="col-toggle" onClick={() => setColBallotsOpen(o => !o)}>
+              <span className="col-toggle-label">My Ballots</span>
+              <span className="col-toggle-meta">{showStats.filter(s => s.bothPicked > 0).length} show{showStats.filter(s => s.bothPicked > 0).length !== 1 ? "s" : ""}</span>
+              <span className="col-toggle-chevron">{colBallotsOpen ? "−" : "+"}</span>
+            </button>
+            {colBallotsOpen && (
+              <div className="profile-all-shows">
+                {showStats.length === 0 && (
+                  <p className="profile-no-shows">No shows available yet.</p>
                 )}
+                {showStats.map(({ show: s, total, willPicked, shouldPicked, bothPicked, willCorrect, shouldCorrect, graded }) => {
+                  const pct = total > 0 ? Math.round((bothPicked / total) * 100) : 0;
+                  const isCurrentShow = s.id === show.id;
+                  const isExporting = exportingShow === s.id;
+                  const isBestShow = bestShow?.show.id === s.id;
+                  const theme = COLOR_THEMES.find(t => t.id === (profileData.accent_color || "gold")) || COLOR_THEMES[0];
+                  const showWinners = isCurrentShow ? winners : {};
+                  const showPicks = allPicksByShow[s.id] || {};
+                  return (
+                    <div key={s.id} className={`show-ballot-row ${isCurrentShow ? "current-show" : ""} ${isBestShow ? "best-show" : ""}`}>
+                      <div className="show-ballot-top">
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <span className="show-ballot-name">{s.name}</span>
+                          {isBestShow && <span className="best-show-badge">🏆 Best</span>}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                          <span className="show-ballot-pct">{pct}%</span>
+                          {bothPicked > 0 && (
+                            <button
+                              className="export-picks-btn"
+                              onClick={() => setExportingShow(isExporting ? null : s.id)}
+                              title="Export ballot as image"
+                            >
+                              {isExporting ? "Close" : "Share ↗"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="show-ballot-bar-track">
+                        <div className="show-ballot-bar-fill" style={{ width: `${pct}%` }} />
+                      </div>
+                      <div className="show-ballot-counts">
+                        <span className="sbc-will">★ {willPicked}/{total}</span>
+                        <span className="sbc-divider">·</span>
+                        <span className="sbc-should">♥ {shouldPicked}/{total}</span>
+                        <span className="sbc-divider">·</span>
+                        <span className="sbc-both">Both {bothPicked}/{total}</span>
+                        {graded > 0 && <>
+                          <span className="sbc-divider">·</span>
+                          <span className="sbc-will" style={{ color: theme.will }}>★ {willCorrect}/{graded} correct</span>
+                          <span className="sbc-divider">·</span>
+                          <span className="sbc-should" style={{ color: theme.should }}>♥ {shouldCorrect}/{graded} matched</span>
+                        </>}
+                      </div>
+                      {isExporting && (
+                        <div className="export-card-container">
+                          <PicksExportCard
+                            show={s}
+                            picks={showPicks}
+                            winners={showWinners}
+                            displayName={displayName}
+                            willColor={theme.will}
+                            shouldColor={theme.should}
+                            onClose={() => setExportingShow(null)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-          </div>
+            )}
           </div> {/* end col--ballots */}
 
           {/* Right: Friends */}
           <div className="profile-col profile-col--friends">
-            <div className="friends-section">
-              {/* Following */}
-              <p className="profile-section-label">Following ({following.length})</p>
-              {following.length === 0 ? (
-                <p className="friends-empty">You're not following anyone yet. Follow people from the Leaderboard or their public profile.</p>
-              ) : (
-                <div className="friends-list">
-                  {following.map(f => {
-                    const theme = COLOR_THEMES.find(t => t.id === f.accent_color) || COLOR_THEMES[0];
-                    const isMutual = followers.some(fw => fw.id === f.id);
-                    return (
-                      <div key={f.id} className="friend-row">
-                        <div className="friend-avatar" style={{ background: `linear-gradient(135deg, ${theme.will}, ${theme.should})` }}>
-                          {(f.username || "?")[0].toUpperCase()}
-                        </div>
-                        <span className="friend-name">{f.username || "Anonymous"}</span>
-                        {isMutual && <span className="mutual-tag">↔ Mutual</span>}
-                        <div className="friend-actions">
-                          {f.username && (
-                            <a className="friend-profile-link" href={`/?u=${f.username}`} target="_blank" rel="noreferrer">Profile ↗</a>
-                          )}
-                          <button className="unfollow-btn" onClick={() => unfollow(f.id)}>Unfollow</button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Followers */}
-              <p className="profile-section-label" style={{ marginTop: "1.5rem" }}>Followers ({followers.length})</p>
-              {followers.length === 0 ? (
-                <p className="friends-empty">No followers yet — share your profile link to get started.</p>
-              ) : (
-                <div className="friends-list">
-                  {followers.map(f => {
-                    const theme = COLOR_THEMES.find(t => t.id === f.accent_color) || COLOR_THEMES[0];
-                    const isFollowingBack = following.some(fw => fw.id === f.id);
-                    return (
-                      <div key={f.id} className="friend-row">
-                        <div className="friend-avatar" style={{ background: `linear-gradient(135deg, ${theme.will}, ${theme.should})` }}>
-                          {(f.username || "?")[0].toUpperCase()}
-                        </div>
-                        <span className="friend-name">{f.username || "Anonymous"}</span>
-                        <div className="friend-actions">
-                          {f.username && (
-                            <a className="friend-profile-link" href={`/?u=${f.username}`} target="_blank" rel="noreferrer">Profile ↗</a>
-                          )}
-                          {isFollowingBack ? (
+            <button className="col-toggle" onClick={() => setColFriendsOpen(o => !o)}>
+              <span className="col-toggle-label">Friends</span>
+              <span className="col-toggle-meta">{following.length} following · {followers.length} followers</span>
+              <span className="col-toggle-chevron">{colFriendsOpen ? "−" : "+"}</span>
+            </button>
+            {colFriendsOpen && (
+              <div className="friends-section">
+                {/* Following */}
+                <p className="profile-section-label">Following ({following.length})</p>
+                {following.length === 0 ? (
+                  <p className="friends-empty">You're not following anyone yet.</p>
+                ) : (
+                  <div className="friends-list friends-list--scrollable">
+                    {following.map(f => {
+                      const theme = COLOR_THEMES.find(t => t.id === f.accent_color) || COLOR_THEMES[0];
+                      const isMutual = followers.some(fw => fw.id === f.id);
+                      return (
+                        <div key={f.id} className="friend-row">
+                          <div className="friend-avatar" style={{ background: `linear-gradient(135deg, ${theme.will}, ${theme.should})` }}>
+                            {(f.username || "?")[0].toUpperCase()}
+                          </div>
+                          <div className="friend-info">
+                            <span className="friend-name">{f.username || "Anonymous"}</span>
+                            {isMutual && <span className="mutual-tag">↔ Mutual</span>}
+                          </div>
+                          <div className="friend-actions">
+                            {f.username && (
+                              <a className="friend-profile-link" href={`/?u=${f.username}`} target="_blank" rel="noreferrer">Profile ↗</a>
+                            )}
                             <button className="unfollow-btn" onClick={() => unfollow(f.id)}>Unfollow</button>
-                          ) : (
-                            <FollowButton currentUserId={user.id} targetId={f.id} onFollow={() => loadFollows()} />
-                          )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Followers */}
+                <p className="profile-section-label" style={{ marginTop: "1rem" }}>Followers ({followers.length})</p>
+                {followers.length === 0 ? (
+                  <p className="friends-empty">No followers yet.</p>
+                ) : (
+                  <div className="friends-list friends-list--scrollable">
+                    {followers.map(f => {
+                      const theme = COLOR_THEMES.find(t => t.id === f.accent_color) || COLOR_THEMES[0];
+                      const isFollowingBack = following.some(fw => fw.id === f.id);
+                      return (
+                        <div key={f.id} className="friend-row">
+                          <div className="friend-avatar" style={{ background: `linear-gradient(135deg, ${theme.will}, ${theme.should})` }}>
+                            {(f.username || "?")[0].toUpperCase()}
+                          </div>
+                          <div className="friend-info">
+                            <span className="friend-name">{f.username || "Anonymous"}</span>
+                          </div>
+                          <div className="friend-actions">
+                            {f.username && (
+                              <a className="friend-profile-link" href={`/?u=${f.username}`} target="_blank" rel="noreferrer">Profile ↗</a>
+                            )}
+                            {isFollowingBack ? (
+                              <button className="unfollow-btn" onClick={() => unfollow(f.id)}>Unfollow</button>
+                            ) : (
+                              <FollowButton currentUserId={user.id} targetId={f.id} onFollow={() => loadFollows()} />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div> {/* end col--friends */}
 
         </div> {/* end profile-columns */}

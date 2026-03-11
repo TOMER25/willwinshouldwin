@@ -1586,3 +1586,86 @@ body {
   .profile-columns { grid-template-columns: 1fr; }
   .profile-wrap { max-width: 100%; }
 }
+
+/* ============================================================
+   COLLAPSIBLE COLUMN TOGGLES
+   ============================================================ */
+.col-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.col-toggle:hover { border-color: var(--gold); }
+.col-toggle-label {
+  font-family: 'Playfair Display', serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--white);
+}
+.col-toggle-meta {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  flex: 1;
+  text-align: left;
+}
+.col-toggle-chevron {
+  font-size: 1rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   SCROLLABLE FRIENDS LIST
+   ============================================================ */
+.friends-list--scrollable {
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.friends-list--scrollable::-webkit-scrollbar { width: 4px; }
+.friends-list--scrollable::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ============================================================
+   FIXED FRIEND ROW — no overflow
+   ============================================================ */
+.friend-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+.friend-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  overflow: hidden;
+}
+.friend-name {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--white);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.friend-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
