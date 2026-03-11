@@ -1945,13 +1945,6 @@ function Profile({ user, picks, show }) {
                 })}
               </div>
             )}
-            <button
-              className={`profile-vis-pill profile-vis-pill--${visibility}`}
-              onClick={() => { setCustomizeOpen(true); setTimeout(() => document.querySelector('.customize-toggle')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); }}
-              title="Change visibility"
-            >
-              {{ public: "🌐 Public", friends: "👥 Friends only", private: "🔒 Private" }[visibility]}
-            </button>
           </div>
           {profileData.favorite_movie_poster && (
             <div className="profile-poster-wrap">
@@ -1959,6 +1952,15 @@ function Profile({ user, picks, show }) {
             </div>
           )}
         </div>
+
+        {/* ── Visibility pill (standalone) ── */}
+        <button
+          className={`profile-vis-pill profile-vis-pill--${visibility}`}
+          onClick={() => { setCustomizeOpen(true); setTimeout(() => document.querySelector('.customize-toggle')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); }}
+          title="Change visibility"
+        >
+          {{ public: "🌐 Public", friends: "👥 Friends only", private: "🔒 Private" }[visibility]}
+        </button>
 
         {/* ── Stats strip ── */}
         {(overallWillPct !== null || totalPickedShows > 0) && (
@@ -1990,84 +1992,12 @@ function Profile({ user, picks, show }) {
           </div>
         )}
 
-        {/* ── Tab bar ── */}
-        <div className="profile-tabs">
-          <button className={`profile-tab ${profileTab === "ballots" ? "active" : ""}`} onClick={() => setProfileTab("ballots")}>My Ballots</button>
-          <button className={`profile-tab ${profileTab === "friends" ? "active" : ""}`} onClick={() => setProfileTab("friends")}>
-            Friends
-            {(following.length + followers.length) > 0 && (
-              <span className="profile-tab-badge">{following.length}</span>
-            )}
-          </button>
-        </div>
+        {/* ── Ballots + Friends side by side ── */}
+        <div className="profile-columns">
 
-        {/* ── Friends tab ── */}
-        {profileTab === "friends" && (
-          <div className="friends-section">
-            {/* Following */}
-            <p className="profile-section-label">Following ({following.length})</p>
-            {following.length === 0 ? (
-              <p className="friends-empty">You're not following anyone yet. Follow people from the Leaderboard or their public profile.</p>
-            ) : (
-              <div className="friends-list">
-                {following.map(f => {
-                  const theme = COLOR_THEMES.find(t => t.id === f.accent_color) || COLOR_THEMES[0];
-                  const isMutual = followers.some(fw => fw.id === f.id);
-                  return (
-                    <div key={f.id} className="friend-row">
-                      <div className="friend-avatar" style={{ background: `linear-gradient(135deg, ${theme.will}, ${theme.should})` }}>
-                        {(f.username || "?")[0].toUpperCase()}
-                      </div>
-                      <span className="friend-name">{f.username || "Anonymous"}</span>
-                      {isMutual && <span className="mutual-tag">↔ Mutual</span>}
-                      <div className="friend-actions">
-                        {f.username && (
-                          <a className="friend-profile-link" href={`/?u=${f.username}`} target="_blank" rel="noreferrer">Profile ↗</a>
-                        )}
-                        <button className="unfollow-btn" onClick={() => unfollow(f.id)}>Unfollow</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Followers */}
-            <p className="profile-section-label" style={{ marginTop: "1.5rem" }}>Followers ({followers.length})</p>
-            {followers.length === 0 ? (
-              <p className="friends-empty">No followers yet — share your profile link to get started.</p>
-            ) : (
-              <div className="friends-list">
-                {followers.map(f => {
-                  const theme = COLOR_THEMES.find(t => t.id === f.accent_color) || COLOR_THEMES[0];
-                  const isFollowingBack = following.some(fw => fw.id === f.id);
-                  return (
-                    <div key={f.id} className="friend-row">
-                      <div className="friend-avatar" style={{ background: `linear-gradient(135deg, ${theme.will}, ${theme.should})` }}>
-                        {(f.username || "?")[0].toUpperCase()}
-                      </div>
-                      <span className="friend-name">{f.username || "Anonymous"}</span>
-                      <div className="friend-actions">
-                        {f.username && (
-                          <a className="friend-profile-link" href={`/?u=${f.username}`} target="_blank" rel="noreferrer">Profile ↗</a>
-                        )}
-                        {isFollowingBack ? (
-                          <button className="unfollow-btn" onClick={() => unfollow(f.id)}>Unfollow</button>
-                        ) : (
-                          <FollowButton currentUserId={user.id} targetId={f.id} onFollow={() => loadFollows()} />
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Ballots tab ── */}
-        {profileTab === "ballots" && (
-        <div className="profile-all-shows">
+          {/* Left: Ballots */}
+          <div className="profile-col profile-col--ballots">
+          <div className="profile-all-shows">
           <p className="profile-section-label">My Ballots</p>
           {showStats.length === 0 && (
             <p className="profile-no-shows">No shows available yet.</p>
@@ -2132,8 +2062,74 @@ function Profile({ user, picks, show }) {
               </div>
             );
           })}
-        </div>
-        )} {/* end ballots tab */}
+          </div>
+          </div> {/* end col--ballots */}
+
+          {/* Right: Friends */}
+          <div className="profile-col profile-col--friends">
+            <div className="friends-section">
+              {/* Following */}
+              <p className="profile-section-label">Following ({following.length})</p>
+              {following.length === 0 ? (
+                <p className="friends-empty">You're not following anyone yet. Follow people from the Leaderboard or their public profile.</p>
+              ) : (
+                <div className="friends-list">
+                  {following.map(f => {
+                    const theme = COLOR_THEMES.find(t => t.id === f.accent_color) || COLOR_THEMES[0];
+                    const isMutual = followers.some(fw => fw.id === f.id);
+                    return (
+                      <div key={f.id} className="friend-row">
+                        <div className="friend-avatar" style={{ background: `linear-gradient(135deg, ${theme.will}, ${theme.should})` }}>
+                          {(f.username || "?")[0].toUpperCase()}
+                        </div>
+                        <span className="friend-name">{f.username || "Anonymous"}</span>
+                        {isMutual && <span className="mutual-tag">↔ Mutual</span>}
+                        <div className="friend-actions">
+                          {f.username && (
+                            <a className="friend-profile-link" href={`/?u=${f.username}`} target="_blank" rel="noreferrer">Profile ↗</a>
+                          )}
+                          <button className="unfollow-btn" onClick={() => unfollow(f.id)}>Unfollow</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Followers */}
+              <p className="profile-section-label" style={{ marginTop: "1.5rem" }}>Followers ({followers.length})</p>
+              {followers.length === 0 ? (
+                <p className="friends-empty">No followers yet — share your profile link to get started.</p>
+              ) : (
+                <div className="friends-list">
+                  {followers.map(f => {
+                    const theme = COLOR_THEMES.find(t => t.id === f.accent_color) || COLOR_THEMES[0];
+                    const isFollowingBack = following.some(fw => fw.id === f.id);
+                    return (
+                      <div key={f.id} className="friend-row">
+                        <div className="friend-avatar" style={{ background: `linear-gradient(135deg, ${theme.will}, ${theme.should})` }}>
+                          {(f.username || "?")[0].toUpperCase()}
+                        </div>
+                        <span className="friend-name">{f.username || "Anonymous"}</span>
+                        <div className="friend-actions">
+                          {f.username && (
+                            <a className="friend-profile-link" href={`/?u=${f.username}`} target="_blank" rel="noreferrer">Profile ↗</a>
+                          )}
+                          {isFollowingBack ? (
+                            <button className="unfollow-btn" onClick={() => unfollow(f.id)}>Unfollow</button>
+                          ) : (
+                            <FollowButton currentUserId={user.id} targetId={f.id} onFollow={() => loadFollows()} />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div> {/* end col--friends */}
+
+        </div> {/* end profile-columns */}
 
         {/* ── Customization (collapsible) ── */}
         <div className="profile-customization">
