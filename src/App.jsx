@@ -3013,7 +3013,7 @@ function ManageShows({ dbShows, onRefresh }) {
               <label className="manage-control-label">Ballots</label>
               <button
                 className={`lifecycle-toggle ${show.ballots_open !== false ? "toggle-on" : "toggle-off"}`}
-                onClick={() => updateShow(show.id, { ballots_open: !show.ballots_open === false ? false : true, ballots_open: show.ballots_open === false ? true : false })}
+                onClick={() => updateShow(show.id, { ballots_open: show.ballots_open === false ? true : false })}
                 disabled={saving === show.id}
               >
                 {show.ballots_open !== false ? "Open ✓" : "Closed ✗"}
