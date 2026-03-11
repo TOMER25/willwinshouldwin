@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "YOUR_SUPABASE_URL";
@@ -3330,12 +3331,15 @@ export default function App() {
   }
 
   return (
-    <HomeScreen
-      onSelectShow={show => { setActiveShow(show); setScreen("show"); }}
-      user={user}
-      onGoProfile={() => setScreen("show")}
-      onGoAdmin={() => setScreen("admin")}
-      allShows={allShows}
-    />
+    <>
+      <HomeScreen
+        onSelectShow={show => { setActiveShow(show); setScreen("show"); }}
+        user={user}
+        onGoProfile={() => setScreen("show")}
+        onGoAdmin={() => setScreen("admin")}
+        allShows={allShows}
+      />
+      <Analytics />
+    </>
   );
 }
