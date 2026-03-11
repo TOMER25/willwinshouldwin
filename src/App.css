@@ -239,7 +239,7 @@ body {
   border: 1px solid var(--border); border-radius: 20px;
   padding: 2px 8px; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
-  max-width: 140px; display: none; /* shown on tablet+ */
+  max-width: 220px; display: none; /* shown on tablet+ */
 }
 
 .app-nav {

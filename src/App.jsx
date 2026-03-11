@@ -1940,7 +1940,7 @@ function Profile({ user, picks, show }) {
             {/* Fav categories tags */}
             {favCategories.length > 0 && (
               <div className="fav-cats-block">
-                <span className="fav-cats-label">Favourite categories</span>
+                <span className="fav-cats-label">Favorite categories</span>
                 <div className="fav-cats-display">
                   {favCategories.map(catId => {
                     const cat = show.categories.find(c => c.id === catId) || allShows.flatMap(s => s.categories).find(c => c.id === catId);
@@ -2285,7 +2285,7 @@ function Profile({ user, picks, show }) {
 
               {/* Favorite categories */}
               <div className="fav-movie-section">
-                <p className="theme-label">Favourite categories</p>
+                <p className="theme-label">Favorite categories</p>
                 <p className="username-hint">Shown on your profile. Pick up to 5 categories you care most about.</p>
                 {editingFavCats ? (
                   <div className="fav-cats-editor">
@@ -3108,7 +3108,7 @@ function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, on
               )}
               {favCats.length > 0 && (
                 <div className="fav-cats-block">
-                  <span className="fav-cats-label">Favourite categories</span>
+                  <span className="fav-cats-label">Favorite categories</span>
                   <div className="fav-cats-display">
                     {favCats.map(catId => {
                       const cat = allShows.flatMap(s => s.categories).find(c => c.id === catId);
