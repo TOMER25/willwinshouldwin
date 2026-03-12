@@ -231,12 +231,12 @@ function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin, allShows }) {
 // ============================================================
 // SHOW APP (picks, community, leaderboard, etc. for one show)
 // ============================================================
-function ShowApp({ show, user, allShows, onGoHome }) {
+function ShowApp({ show, user, allShows, onGoHome, defaultView = "picks" }) {
   const [picks, setPicks] = useState({});
   const [aggregates, setAggregates] = useState({});
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState(false);
-  const [view, setView] = useState("picks");
+  const [view, setView] = useState(defaultView);
   const [showResultsModal, setShowResultsModal] = useState(false);
   const [winners, setWinners] = useState({});
 
@@ -3649,23 +3649,9 @@ export default function App() {
 
   if (!user) return <AuthModal onAuth={setUser} />;
   if (screen === "admin") return <AdminPanel onBack={() => { setScreen("home"); loadAllShows(); }} />;
-  if (screen === "profile") return (
-    <div className="app">
-      <header className="app-header">
-        <div className="header-top">
-          <div className="header-left">
-            <button className="back-home-btn" onClick={() => setScreen("home")} title="All shows">←</button>
-            <Logo onClick={() => setScreen("home")} />
-          </div>
-          <div className="header-right">
-            <button className="signout-btn" onClick={() => supabase.auth.signOut()}>Sign Out</button>
-          </div>
-        </div>
-      </header>
-      <Profile user={user} picks={{}} show={null} />
-      <footer className="app-footer">willwinshouldwin.com</footer>
-    </div>
-  );
+  if (screen === "profile" && activeShow) {
+    return <ShowApp show={activeShow} user={user} allShows={allShows} defaultView="profile" onGoHome={() => { setScreen("home"); setActiveShow(null); }} />;
+  }
   if (screen === "show" && activeShow) {
     return <ShowApp show={activeShow} user={user} allShows={allShows} onGoHome={() => { setScreen("home"); setActiveShow(null); }} />;
   }
@@ -3675,7 +3661,7 @@ export default function App() {
       <HomeScreen
         onSelectShow={show => { setActiveShow(show); setScreen("show"); }}
         user={user}
-        onGoProfile={() => setScreen("profile")}
+        onGoProfile={() => { const first = allShows[0]; if (first) { setActiveShow(first); setScreen("profile"); } }}
         onGoAdmin={() => setScreen("admin")}
         allShows={allShows}
       />
