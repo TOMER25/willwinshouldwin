@@ -16,6 +16,75 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "oscars2026admin";
 
 // ============================================================
+// TMDB + AFFILIATE CONFIG
+// ============================================================
+const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || "";
+const AMAZON_TAG = "willwinshould-20";
+
+// Streaming platform display config — name, color, and affiliate link builder
+const STREAMING_PLATFORMS = {
+  "Netflix":         { color: "#E50914", icon: "N", url: q => `https://www.netflix.com/search?q=${encodeURIComponent(q)}` },
+  "Amazon Prime Video": { color: "#00A8E1", icon: "a", url: q => `https://www.amazon.com/s?k=${encodeURIComponent(q)}&i=instant-video&tag=${AMAZON_TAG}` },
+  "Apple TV+":       { color: "#555", icon: "", url: q => `https://tv.apple.com/search?term=${encodeURIComponent(q)}` },
+  "Disney+":         { color: "#113CCF", icon: "D+", url: q => `https://www.disneyplus.com/search?q=${encodeURIComponent(q)}` },
+  "Max":             { color: "#002BE7", icon: "M", url: q => `https://play.max.com/search?q=${encodeURIComponent(q)}` },
+  "Hulu":            { color: "#1CE783", icon: "h", url: q => `https://www.hulu.com/search?q=${encodeURIComponent(q)}` },
+  "Peacock":         { color: "#F47B20", icon: "P", url: q => `https://www.peacocktv.com/search?q=${encodeURIComponent(q)}` },
+  "Paramount+":      { color: "#0064FF", icon: "P+", url: q => `https://www.paramountplus.com/search/?query=${encodeURIComponent(q)}` },
+  "Mubi":            { color: "#c9a84c", icon: "M", url: q => `https://mubi.com/en/search?query=${encodeURIComponent(q)}` },
+};
+
+// Extract the film title from a nominee string like "Demi Moore — The Substance" → "The Substance"
+// For nominees that ARE the film title (Best Picture, etc.), returns as-is
+function extractFilmTitle(nomineeStr) {
+  if (!nomineeStr) return null;
+  // Common separators: em dash, en dash, hyphen with spaces
+  const parts = nomineeStr.split(/\s[—–-]\s/);
+  return parts[parts.length - 1].trim();
+}
+
+// TMDB search + streaming lookup
+async function fetchFilmData(title) {
+  if (!TMDB_API_KEY) return null;
+  try {
+    const searchRes = await fetch(
+      `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(title)}&include_adult=false`
+    );
+    const searchData = await searchRes.json();
+    const movie = searchData.results?.[0];
+    if (!movie) return null;
+
+    const [detailRes, providersRes] = await Promise.all([
+      fetch(`https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}`),
+      fetch(`https://api.themoviedb.org/3/movie/${movie.id}/watch/providers?api_key=${TMDB_API_KEY}`),
+    ]);
+    const detail = await detailRes.json();
+    const providers = await providersRes.json();
+
+    // US streaming flatrate (subscription) providers
+    const usProviders = providers.results?.US;
+    const streaming = usProviders?.flatrate || [];
+    const rent = usProviders?.rent || [];
+    const buy = usProviders?.buy || [];
+
+    return {
+      id: movie.id,
+      title: detail.title,
+      overview: detail.overview,
+      poster: detail.poster_path ? `https://image.tmdb.org/t/p/w342${detail.poster_path}` : null,
+      year: detail.release_date?.slice(0, 4),
+      runtime: detail.runtime,
+      streaming,
+      rent,
+      buy,
+      tmdbUrl: `https://www.themoviedb.org/movie/${movie.id}`,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+// ============================================================
 // GLOSSARY
 // ============================================================
 const GLOSSARY = [
@@ -583,13 +652,148 @@ function PicksView({ picks, aggregates, onPick, categories, ballotsOpen, results
 }
 
 // ============================================================
+// FILM MODAL — "Where to Watch"
+// ============================================================
+function FilmModal({ nomineeStr, onClose }) {
+  const [filmData, setFilmData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const filmTitle = extractFilmTitle(nomineeStr);
+
+  useEffect(() => {
+    if (!filmTitle) { setLoading(false); return; }
+    fetchFilmData(filmTitle).then(data => {
+      setFilmData(data);
+      setLoading(false);
+    });
+  }, [filmTitle]);
+
+  // Close on backdrop click
+  const handleBackdrop = (e) => { if (e.target === e.currentTarget) onClose(); };
+
+  // Map TMDB provider name to our config
+  const matchPlatform = (providerName) => {
+    const key = Object.keys(STREAMING_PLATFORMS).find(k =>
+      providerName.toLowerCase().includes(k.toLowerCase()) ||
+      k.toLowerCase().includes(providerName.toLowerCase())
+    );
+    return key ? { ...STREAMING_PLATFORMS[key], name: key } : null;
+  };
+
+  return (
+    <div className="film-modal-backdrop" onClick={handleBackdrop}>
+      <div className="film-modal">
+        <button className="film-modal-close" onClick={onClose}>✕</button>
+
+        {loading ? (
+          <div className="film-modal-loading">Loading…</div>
+        ) : !filmData ? (
+          <div className="film-modal-not-found">
+            <p className="film-modal-title-fallback">{filmTitle}</p>
+            <p className="film-modal-no-data">Streaming info not available</p>
+          </div>
+        ) : (
+          <div className="film-modal-content">
+            {/* Left: poster */}
+            {filmData.poster && (
+              <div className="film-modal-poster-wrap">
+                <img src={filmData.poster} alt={filmData.title} className="film-modal-poster" />
+              </div>
+            )}
+
+            {/* Right: info */}
+            <div className="film-modal-info">
+              <h2 className="film-modal-title">{filmData.title}</h2>
+              <div className="film-modal-meta">
+                {filmData.year && <span>{filmData.year}</span>}
+                {filmData.runtime > 0 && <span>{filmData.runtime} min</span>}
+              </div>
+              {filmData.overview && (
+                <p className="film-modal-overview">{filmData.overview}</p>
+              )}
+
+              {/* Streaming — subscription */}
+              {filmData.streaming?.length > 0 && (
+                <div className="film-modal-section">
+                  <p className="film-modal-section-label">Stream</p>
+                  <div className="film-modal-badges">
+                    {filmData.streaming.map(p => {
+                      const cfg = matchPlatform(p.provider_name);
+                      return (
+                        <a
+                          key={p.provider_id}
+                          href={cfg ? cfg.url(filmData.title) : "#"}
+                          target="_blank" rel="noopener noreferrer"
+                          className="film-platform-badge"
+                          style={{ "--platform-color": cfg?.color || "var(--gold)" }}
+                          title={`Watch on ${p.provider_name}`}
+                        >
+                          {p.provider_name}
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Rent / Buy */}
+              {(filmData.rent?.length > 0 || filmData.buy?.length > 0) && (
+                <div className="film-modal-section">
+                  <p className="film-modal-section-label">Rent or Buy</p>
+                  <div className="film-modal-badges">
+                    {[...new Map([...(filmData.rent || []), ...(filmData.buy || [])].map(p => [p.provider_id, p])).values()].map(p => {
+                      const cfg = matchPlatform(p.provider_name);
+                      return (
+                        <a
+                          key={p.provider_id}
+                          href={cfg ? cfg.url(filmData.title) : "#"}
+                          target="_blank" rel="noopener noreferrer"
+                          className="film-platform-badge film-platform-badge--rent"
+                          style={{ "--platform-color": cfg?.color || "var(--text-dim)" }}
+                          title={`Rent/buy on ${p.provider_name}`}
+                        >
+                          {p.provider_name}
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* No streaming info at all */}
+              {filmData.streaming?.length === 0 && filmData.rent?.length === 0 && filmData.buy?.length === 0 && (
+                <p className="film-modal-no-streaming">Not currently available to stream in the US</p>
+              )}
+
+              {/* Amazon CTA — always show, links to search */}
+              <a
+                href={`https://www.amazon.com/s?k=${encodeURIComponent(filmData.title)}&i=instant-video&tag=${AMAZON_TAG}`}
+                target="_blank" rel="noopener noreferrer"
+                className="film-modal-amazon-cta"
+              >
+                Search on Prime Video →
+              </a>
+
+              <p className="film-modal-attribution">Streaming data via TMDB</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // CATEGORY CARD
 // ============================================================
 function CategoryCard({ category, userPicks, onPick, aggregates, locked, winner }) {
   const willWin = userPicks?.[category.id]?.will_win;
   const shouldWin = userPicks?.[category.id]?.should_win;
+  const [filmModalNominee, setFilmModalNominee] = useState(null);
   return (
     <div className={`category-card ${locked ? "category-locked" : ""}`} id={`cat-${category.id}`}>
+      {filmModalNominee && (
+        <FilmModal nomineeStr={filmModalNominee} onClose={() => setFilmModalNominee(null)} />
+      )}
       <h3 className="category-name">
         {category.name}
         {locked && !winner && <span className="lock-icon">🔒</span>}
@@ -608,7 +812,14 @@ function CategoryCard({ category, userPicks, onPick, aggregates, locked, winner 
             <div key={nominee} className={`nominee-row ${isWillWin || isShouldWin ? "picked" : ""} ${isWinner ? "nominee-winner" : ""}`}>
               <div className="nominee-name">
                 {isWinner && <span className="winner-trophy">★ </span>}
-                {nominee}
+                <button
+                  className="nominee-name-btn"
+                  onClick={() => TMDB_API_KEY && setFilmModalNominee(nominee)}
+                  title={TMDB_API_KEY ? "Where to watch" : undefined}
+                  style={{ cursor: TMDB_API_KEY ? "pointer" : "default" }}
+                >
+                  {nominee}
+                </button>
                 {!isWinner && pct?.will_win_pct > 0 && <span className="agg-badge will-agg">{Math.round(pct.will_win_pct)}%</span>}
                 {!isWinner && pct?.should_win_pct > 0 && <span className="agg-badge should-agg">{Math.round(pct.should_win_pct)}%</span>}
               </div>
