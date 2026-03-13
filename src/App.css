@@ -1822,21 +1822,18 @@ body {
 }
 .film-modal-no-data { color: var(--text-dim); font-size: 0.8rem; }
 
-/* Fixed min-height so poster is always fully shown */
 .film-modal-content {
   display: flex; gap: 0; align-items: stretch;
-  min-height: 380px;
 }
 .film-modal-poster-wrap {
-  flex-shrink: 0; width: 160px; min-height: 380px;
+  flex-shrink: 0; width: 160px;
   border-radius: 14px 0 0 14px; overflow: hidden;
-  position: relative;
+  display: flex;
 }
 .film-modal-poster {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
+  width: 100%; height: auto; min-height: 100%;
   object-fit: cover; object-position: center top;
-  display: block;
+  display: block; flex: 1;
 }
 .film-modal-info {
   flex: 1; padding: 1.5rem 1.5rem 1.25rem;
