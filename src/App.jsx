@@ -107,6 +107,9 @@ function AuthModal({ onAuth }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [awaitingConfirm, setAwaitingConfirm] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
 
   const handleSubmit = async () => {
     setLoading(true); setError("");
@@ -123,6 +126,19 @@ function AuthModal({ onAuth }) {
         if (error) throw error;
         setAwaitingConfirm(true);
       }
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  };
+
+  const handleForgotPassword = async () => {
+    if (!forgotEmail.trim()) return;
+    setLoading(true); setError("");
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
+        redirectTo: `${window.location.origin}?reset=1`,
+      });
+      if (error) throw error;
+      setForgotSent(true);
     } catch (e) { setError(e.message); }
     setLoading(false);
   };
@@ -146,6 +162,50 @@ function AuthModal({ onAuth }) {
     </div>
   );
 
+  // Forgot password — sent confirmation
+  if (showForgot && forgotSent) return (
+    <div className="auth-backdrop">
+      <div className="auth-modal">
+        <Logo />
+        <div className="auth-confirm-box">
+          <p className="auth-confirm-icon">✉</p>
+          <h3 className="auth-confirm-title">Reset link sent</h3>
+          <p className="auth-confirm-body">
+            If an account exists for <strong>{forgotEmail}</strong>, you'll receive a password reset link shortly.
+          </p>
+          <button className="auth-submit" onClick={() => { setShowForgot(false); setForgotSent(false); setForgotEmail(""); setMode("login"); }}>
+            Back to Sign In
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Forgot password — email entry
+  if (showForgot) return (
+    <div className="auth-backdrop">
+      <div className="auth-modal">
+        <Logo />
+        <p className="auth-tagline">We'll send you a reset link.</p>
+        <input
+          className="auth-input"
+          type="email"
+          placeholder="Your email address"
+          value={forgotEmail}
+          onChange={e => setForgotEmail(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleForgotPassword()}
+        />
+        {error && <div className="auth-error">{error}</div>}
+        <button className="auth-submit" onClick={handleForgotPassword} disabled={loading || !forgotEmail.trim()}>
+          {loading ? "…" : "Send Reset Link"}
+        </button>
+        <button className="auth-forgot-link" onClick={() => { setShowForgot(false); setError(""); }}>
+          ← Back to Sign In
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="auth-backdrop">
       <div className="auth-modal">
@@ -161,6 +221,77 @@ function AuthModal({ onAuth }) {
         {error && <div className="auth-error">{error}</div>}
         <button className="auth-submit" onClick={handleSubmit} disabled={loading}>
           {loading ? "…" : mode === "login" ? "Sign In" : "Create Account"}
+        </button>
+        {mode === "login" && (
+          <button className="auth-forgot-link" onClick={() => { setShowForgot(true); setForgotEmail(email); setError(""); }}>
+            Forgot your password?
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// RESET PASSWORD SCREEN
+// ============================================================
+function ResetPasswordScreen({ onDone }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const handleReset = async () => {
+    if (!password) { setError("Please enter a new password."); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (password !== confirm) { setError("Passwords don't match."); return; }
+    setLoading(true); setError("");
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      setSuccess(true);
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  };
+
+  if (success) return (
+    <div className="auth-backdrop">
+      <div className="auth-modal">
+        <Logo />
+        <div className="auth-confirm-box">
+          <p className="auth-confirm-icon">✓</p>
+          <h3 className="auth-confirm-title">Password updated</h3>
+          <p className="auth-confirm-body">Your password has been changed. You're now signed in.</p>
+          <button className="auth-submit" onClick={onDone}>Continue to App</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="auth-backdrop">
+      <div className="auth-modal">
+        <Logo />
+        <p className="auth-tagline">Choose a new password.</p>
+        <input
+          className="auth-input"
+          type="password"
+          placeholder="New password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+        />
+        <input
+          className="auth-input"
+          type="password"
+          placeholder="Confirm new password"
+          value={confirm}
+          onChange={e => setConfirm(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleReset()}
+        />
+        {error && <div className="auth-error">{error}</div>}
+        <button className="auth-submit" onClick={handleReset} disabled={loading}>
+          {loading ? "…" : "Set New Password"}
         </button>
       </div>
     </div>
@@ -3557,6 +3688,7 @@ export default function App() {
   const [showsLoading, setShowsLoading] = useState(true);
   const [publicProfileId, setPublicProfileId] = useState(null);
   const [publicProfileUsername, setPublicProfileUsername] = useState(null);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
 
   useEffect(() => {
     document.title = "WillWin / ShouldWin";
@@ -3573,9 +3705,13 @@ export default function App() {
       if (session?.user) loadUserTheme(session.user.id);
       setLoading(false);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) loadUserTheme(session.user.id);
+      if (event === "PASSWORD_RECOVERY") {
+        setIsResettingPassword(true);
+        window.history.replaceState({}, "", window.location.pathname);
+      }
     });
     loadAllShows();
     return () => subscription.unsubscribe();
@@ -3633,6 +3769,11 @@ export default function App() {
   };
 
   if (loading || showsLoading) return <div className="loading-screen"><div className="loading-inner">Loading…</div></div>;
+
+  // Password reset flow — triggered by Supabase email link
+  if (isResettingPassword) {
+    return <ResetPasswordScreen onDone={() => setIsResettingPassword(false)} />;
+  }
 
   // Public profile — shown to anyone, logged in or not
   if (screen === "public-profile" && publicProfileId) {
