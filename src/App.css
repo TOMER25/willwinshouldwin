@@ -1822,26 +1822,21 @@ body {
 }
 .film-modal-no-data { color: var(--text-dim); font-size: 0.8rem; }
 
-/* Fixed min-height so poster is always fully shown */
+/* Poster renders at natural 2:3 ratio — never cropped */
 .film-modal-content {
-  display: flex; gap: 0; align-items: stretch;
-  min-height: 380px;
+  display: flex; gap: 0; align-items: flex-start;
 }
 .film-modal-poster-wrap {
-  flex-shrink: 0; width: 160px; min-height: 380px;
+  flex-shrink: 0; width: 180px;
   border-radius: 14px 0 0 14px; overflow: hidden;
-  position: relative;
 }
 .film-modal-poster {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  object-fit: cover; object-position: center top;
-  display: block;
+  width: 100%; height: auto; display: block;
 }
 .film-modal-info {
   flex: 1; padding: 1.5rem 1.5rem 1.25rem;
   display: flex; flex-direction: column; gap: 0.85rem;
-  min-width: 0;
+  min-width: 0; min-height: 320px;
 }
 .film-modal-title {
   font-family: 'Playfair Display', serif;
@@ -1932,9 +1927,9 @@ body {
 }
 
 @media (max-width: 520px) {
-  .film-modal-content { flex-direction: column; min-height: unset; }
-  .film-modal-poster-wrap { width: 100%; height: 240px; min-height: unset; border-radius: 14px 14px 0 0; }
-  .film-modal-poster { object-position: center 20%; }
+  .film-modal-content { flex-direction: column; }
+  .film-modal-poster-wrap { width: 100%; border-radius: 14px 14px 0 0; }
+  .film-modal-poster { width: 100%; height: auto; max-height: 280px; object-fit: cover; object-position: center 20%; }
 }
 
 /* ============================================================
