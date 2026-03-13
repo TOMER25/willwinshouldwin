@@ -1822,15 +1822,21 @@ body {
 }
 .film-modal-no-data { color: var(--text-dim); font-size: 0.8rem; }
 
+/* Fixed min-height so poster is always fully shown */
 .film-modal-content {
   display: flex; gap: 0; align-items: stretch;
+  min-height: 380px;
 }
 .film-modal-poster-wrap {
-  flex-shrink: 0; width: 160px;
+  flex-shrink: 0; width: 160px; min-height: 380px;
   border-radius: 14px 0 0 14px; overflow: hidden;
+  position: relative;
 }
 .film-modal-poster {
-  width: 100%; height: 100%; object-fit: cover; display: block;
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; object-position: center top;
+  display: block;
 }
 .film-modal-info {
   flex: 1; padding: 1.5rem 1.5rem 1.25rem;
@@ -1841,7 +1847,7 @@ body {
   font-family: 'Playfair Display', serif;
   font-size: 1.35rem; font-weight: 700;
   color: var(--white); line-height: 1.2;
-  padding-right: 2rem; /* avoid overlap with close btn */
+  padding-right: 2rem;
 }
 .film-modal-meta {
   display: flex; gap: 0.75rem;
@@ -1882,9 +1888,7 @@ body {
   border-color: var(--platform-color);
   color: var(--white);
 }
-.film-platform-badge--rent {
-  opacity: 0.75;
-}
+.film-platform-badge--rent { opacity: 0.75; }
 .film-platform-badge--rent:hover { opacity: 1; }
 
 .film-modal-no-streaming {
@@ -1922,15 +1926,13 @@ body {
 .nominee-name-btn[style*="pointer"] { text-decoration-line: underline; text-decoration-style: dotted; text-underline-offset: 3px; text-decoration-color: var(--text-muted); }
 .nominee-name-btn[style*="pointer"]:hover { color: var(--gold-light); text-decoration-color: var(--gold); }
 
-/* Animations */
 @keyframes slideUp {
   from { transform: translateY(16px); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
 }
 
-/* Mobile adjustments */
 @media (max-width: 520px) {
-  .film-modal-content { flex-direction: column; }
-  .film-modal-poster-wrap { width: 100%; height: 200px; border-radius: 14px 14px 0 0; }
+  .film-modal-content { flex-direction: column; min-height: unset; }
+  .film-modal-poster-wrap { width: 100%; height: 240px; min-height: unset; border-radius: 14px 14px 0 0; }
   .film-modal-poster { object-position: center 20%; }
 }
