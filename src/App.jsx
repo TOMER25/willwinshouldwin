@@ -370,6 +370,68 @@ function ResetPasswordScreen({ onDone }) {
 // ============================================================
 // HOME SCREEN
 // ============================================================
+// ============================================================
+// ONBOARDING MODAL
+// ============================================================
+function OnboardingModal({ onDismiss }) {
+  const [step, setStep] = useState(0);
+
+  const steps = [
+    {
+      icon: "★ / ♥",
+      title: "Two picks. One ballot.",
+      body: "For every category you make two picks: who you think will win (★ Will Win) and who you believe deserves to win (♥ Should Win). They can be the same — or very different.",
+    },
+    {
+      icon: "◎",
+      title: "How scoring works",
+      body: "Every correct ★ Will Win earns you a point on the leaderboard. ♥ Should Win isn't scored — it's your taste on record. After the ceremony we reveal how often your gut matched the voters.",
+    },
+    {
+      icon: "⬡",
+      title: "Compete with friends",
+      body: "Follow friends to compare ballots side-by-side. Create or join a League for a private leaderboard. Share your profile link so anyone can see your picks.",
+    },
+  ];
+
+  const current = steps[step];
+  const isLast = step === steps.length - 1;
+
+  return (
+    <div className="onboarding-overlay" onClick={onDismiss}>
+      <div className="onboarding-modal" onClick={e => e.stopPropagation()}>
+        <div className="onboarding-step-dots">
+          {steps.map((_, i) => (
+            <button
+              key={i}
+              className={`onboarding-dot ${i === step ? "active" : ""}`}
+              onClick={() => setStep(i)}
+              aria-label={`Step ${i + 1}`}
+            />
+          ))}
+        </div>
+
+        <div className="onboarding-icon">{current.icon}</div>
+        <h2 className="onboarding-title">{current.title}</h2>
+        <p className="onboarding-body">{current.body}</p>
+
+        <div className="onboarding-actions">
+          {isLast ? (
+            <button className="auth-submit onboarding-cta" onClick={onDismiss}>
+              Start picking →
+            </button>
+          ) : (
+            <button className="auth-submit onboarding-cta" onClick={() => setStep(s => s + 1)}>
+              Next
+            </button>
+          )}
+          <button className="onboarding-skip" onClick={onDismiss}>Skip</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin, allShows }) {
   return (
     <div className="home-screen">
@@ -431,7 +493,7 @@ function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin, allShows }) {
 // ============================================================
 // SHOW APP (picks, community, leaderboard, etc. for one show)
 // ============================================================
-function ShowApp({ show, user, allShows, onGoHome, defaultView = "picks" }) {
+function ShowApp({ show, user, allShows, onGoHome, defaultView = "picks", pendingLeagueCode = null, onClearLeagueCode = null }) {
   const [picks, setPicks] = useState({});
   const [aggregates, setAggregates] = useState({});
   const [saving, setSaving] = useState(false);
@@ -584,7 +646,7 @@ function ShowApp({ show, user, allShows, onGoHome, defaultView = "picks" }) {
           onShowResults={() => setShowResultsModal(true)}
         />
       )}
-      {view === "community" && <Community currentUserId={user.id} show={show} />}
+      {view === "community" && <Community currentUserId={user.id} show={show} pendingLeagueCode={pendingLeagueCode} onClearLeagueCode={onClearLeagueCode} />}
       {view === "leaderboard" && <Leaderboard currentUserId={user.id} show={show} />}
       {view === "profile" && <Profile user={user} picks={picks} show={show} />}
       {view === "glossary" && <GlossaryView />}
@@ -1303,8 +1365,8 @@ function LbBreakdownChart({ data, players }) {
 // ============================================================
 // COMMUNITY
 // ============================================================
-function Community({ currentUserId, show }) {
-  const [tab, setTab] = useState("community"); // "community" | "compare" | "leagues"
+function Community({ currentUserId, show, pendingLeagueCode = null, onClearLeagueCode = null }) {
+  const [tab, setTab] = useState(pendingLeagueCode ? "leagues" : "community"); // "community" | "compare" | "leagues"
   const [allPicks, setAllPicks] = useState({});
   const [loading, setLoading] = useState(true);
   const [compareUser, setCompareUser] = useState(null);
@@ -1400,26 +1462,34 @@ function Community({ currentUserId, show }) {
             <span className="agg-badge will-agg">★%</span> Will Win consensus &nbsp;
             <span className="agg-badge should-agg">♥%</span> Should Win consensus
           </div>
-          <div className="community-grid">
-            {show.categories.map(cat => {
-              const catData = allPicks[cat.id];
-              if (!catData) return null;
-              const sorted = cat.nominees.map(nom => ({ nom, ...catData[nom] })).filter(n => n.will_win_pct > 0 || n.should_win_pct > 0).sort((a, b) => (b.will_win_pct || 0) - (a.will_win_pct || 0));
-              if (sorted.length === 0) return null;
-              return (
-                <div key={cat.id} className="community-card">
-                  <h4>{cat.name}</h4>
-                  {sorted.map(item => (
-                    <div key={item.nom} className="community-row">
-                      <span className="community-nom">{item.nom}</span>
-                      {item.will_win_pct > 0 && <span className="agg-badge will-agg">{Math.round(item.will_win_pct)}%</span>}
-                      {item.should_win_pct > 0 && <span className="agg-badge should-agg">{Math.round(item.should_win_pct)}%</span>}
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
+          {Object.keys(allPicks).length === 0 ? (
+            <div className="community-empty-state">
+              <div className="empty-state-icon">★</div>
+              <p className="empty-state-heading">No picks yet.</p>
+              <p className="empty-state-sub">Be the first to submit your ballot. Community consensus will appear here once others start picking.</p>
+            </div>
+          ) : (
+            <div className="community-grid">
+              {show.categories.map(cat => {
+                const catData = allPicks[cat.id];
+                if (!catData) return null;
+                const sorted = cat.nominees.map(nom => ({ nom, ...catData[nom] })).filter(n => n.will_win_pct > 0 || n.should_win_pct > 0).sort((a, b) => (b.will_win_pct || 0) - (a.will_win_pct || 0));
+                if (sorted.length === 0) return null;
+                return (
+                  <div key={cat.id} className="community-card">
+                    <h4>{cat.name}</h4>
+                    {sorted.map(item => (
+                      <div key={item.nom} className="community-row">
+                        <span className="community-nom">{item.nom}</span>
+                        {item.will_win_pct > 0 && <span className="agg-badge will-agg">{Math.round(item.will_win_pct)}%</span>}
+                        {item.should_win_pct > 0 && <span className="agg-badge should-agg">{Math.round(item.should_win_pct)}%</span>}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
 
@@ -1500,7 +1570,7 @@ function Community({ currentUserId, show }) {
 
       {/* ── LEAGUES ── */}
       {tab === "leagues" && (
-        <Leagues currentUserId={currentUserId} show={show} allProfiles={userList} />
+        <Leagues currentUserId={currentUserId} show={show} allProfiles={userList} pendingLeagueCode={pendingLeagueCode} onClearLeagueCode={onClearLeagueCode} />
       )}
     </div>
   );
@@ -1509,10 +1579,10 @@ function Community({ currentUserId, show }) {
 // ============================================================
 // LEAGUES
 // ============================================================
-function Leagues({ currentUserId, show, allProfiles }) {
+function Leagues({ currentUserId, show, allProfiles, pendingLeagueCode = null, onClearLeagueCode = null }) {
   const [leagues, setLeagues] = useState([]);       // leagues I belong to
   const [activeLeague, setActiveLeague] = useState(null);
-  const [leagueView, setLeagueView] = useState("list"); // "list" | "detail" | "create" | "join"
+  const [leagueView, setLeagueView] = useState(pendingLeagueCode ? "join" : "list"); // "list" | "detail" | "create" | "join"
   const [loading, setLoading] = useState(true);
 
   // Create form state
@@ -1521,7 +1591,7 @@ function Leagues({ currentUserId, show, allProfiles }) {
   const [createError, setCreateError] = useState("");
 
   // Join form state
-  const [joinCode, setJoinCode] = useState("");
+  const [joinCode, setJoinCode] = useState(pendingLeagueCode || "");
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState("");
 
@@ -1574,6 +1644,7 @@ function Leagues({ currentUserId, show, allProfiles }) {
     await supabase.from("league_members").insert({ league_id: league.id, user_id: currentUserId });
     setJoining(false);
     setJoinCode("");
+    if (onClearLeagueCode) onClearLeagueCode();
     await loadLeagues();
     openLeague(league);
   };
@@ -1619,7 +1690,7 @@ function Leagues({ currentUserId, show, allProfiles }) {
   };
 
   const copyInvite = (code) => {
-    navigator.clipboard.writeText(code);
+    navigator.clipboard.writeText(`${window.location.origin}/?league=${code}`);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
   };
@@ -1649,8 +1720,13 @@ function Leagues({ currentUserId, show, allProfiles }) {
       </div>
       {leagues.length === 0 && (
         <div className="leagues-empty">
-          <p>You're not in any leagues yet.</p>
-          <p>Create one and share the invite code with friends, or enter a code to join an existing league.</p>
+          <div className="empty-state-icon">⬡</div>
+          <p className="empty-state-heading">No leagues yet.</p>
+          <p className="empty-state-sub">Create one and share the invite link with friends — or enter a code to join an existing league.</p>
+          <div className="empty-state-actions">
+            <button className="auth-submit" style={{ width: "auto", padding: "0.55rem 1.5rem", fontSize: "0.82rem" }} onClick={() => setLeagueView("create")}>+ Create a league</button>
+            <button className="add-cat-btn" onClick={() => setLeagueView("join")}>Join with code</button>
+          </div>
         </div>
       )}
       <div className="leagues-list">
@@ -1706,12 +1782,12 @@ function Leagues({ currentUserId, show, allProfiles }) {
         <h3 className="compare-title">{activeLeague.name}</h3>
       </div>
 
-      {/* Invite code */}
+      {/* Invite link */}
       <div className="league-invite-row">
-        <span className="league-invite-label">Invite code</span>
-        <span className="league-invite-code">{activeLeague.invite_code}</span>
+        <span className="league-invite-label">Invite link</span>
+        <span className="league-invite-url">{window.location.origin}/?league={activeLeague.invite_code}</span>
         <button className="copy-link-btn" onClick={() => copyInvite(activeLeague.invite_code)}>
-          {copiedCode ? "Copied!" : "Copy"}
+          {copiedCode ? "Copied!" : "Copy link"}
         </button>
       </div>
 
@@ -2732,7 +2808,10 @@ function Profile({ user, picks, show }) {
                 {/* Following */}
                 <p className="profile-section-label">Following ({following.length})</p>
                 {following.length === 0 ? (
-                  <p className="friends-empty">You're not following anyone yet.</p>
+                  <div className="friends-empty-state">
+                    <p className="friends-empty">You're not following anyone yet.</p>
+                    <p className="friends-empty-hint">Head to the <strong>Compare</strong> tab to find friends by username, or share your profile link so they can find you.</p>
+                  </div>
                 ) : (
                   <div className="friends-list friends-list--scrollable">
                     {following.map(f => {
@@ -2762,7 +2841,10 @@ function Profile({ user, picks, show }) {
                 {/* Followers */}
                 <p className="profile-section-label" style={{ marginTop: "1rem" }}>Followers ({followers.length})</p>
                 {followers.length === 0 ? (
-                  <p className="friends-empty">No followers yet.</p>
+                  <div className="friends-empty-state">
+                    <p className="friends-empty">No followers yet.</p>
+                    <p className="friends-empty-hint">Share your profile link and invite friends to follow your picks.</p>
+                  </div>
                 ) : (
                   <div className="friends-list friends-list--scrollable">
                     {followers.map(f => {
@@ -3900,20 +3982,34 @@ export default function App() {
   const [publicProfileId, setPublicProfileId] = useState(null);
   const [publicProfileUsername, setPublicProfileUsername] = useState(null);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [pendingLeagueCode, setPendingLeagueCode] = useState(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     document.title = "WillWin / ShouldWin";
 
-    // Check URL for public profile param: ?u=username
+    // Check URL params
     const params = new URLSearchParams(window.location.search);
     const uParam = params.get("u");
+    const leagueParam = params.get("league");
     if (uParam) {
       resolveUsername(uParam);
+    }
+    if (leagueParam) {
+      const code = leagueParam.toUpperCase();
+      setPendingLeagueCode(code);
+      sessionStorage.setItem("pendingLeagueCode", code);
+      window.history.replaceState({}, "", window.location.pathname);
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      if (session?.user) loadUserTheme(session.user.id);
+      if (session?.user) {
+        loadUserTheme(session.user.id);
+        // Restore pending league code if user just logged in via invite link
+        const stored = sessionStorage.getItem("pendingLeagueCode");
+        if (stored && !pendingLeagueCode) setPendingLeagueCode(stored);
+      }
       setLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -3950,8 +4046,9 @@ export default function App() {
   };
 
   const loadUserTheme = async (userId) => {
-    const { data } = await supabase.from("profiles").select("accent_color").eq("id", userId).single();
+    const { data } = await supabase.from("profiles").select("accent_color, has_seen_onboarding").eq("id", userId).single();
     if (data?.accent_color) applyTheme(data.accent_color);
+    if (!data?.has_seen_onboarding) setShowOnboarding(true);
   };
 
   const loadAllShows = async () => {
@@ -4002,11 +4099,16 @@ export default function App() {
   if (!user) return <AuthModal onAuth={setUser} />;
   if (screen === "admin") return <AdminPanel onBack={() => { setScreen("home"); loadAllShows(); }} />;
   if (screen === "profile" && activeShow) {
-    return <ShowApp show={activeShow} user={user} allShows={allShows} defaultView="profile" onGoHome={() => { setScreen("home"); setActiveShow(null); }} />;
+    return <ShowApp show={activeShow} user={user} allShows={allShows} defaultView="profile" onGoHome={() => { setScreen("home"); setActiveShow(null); }} pendingLeagueCode={pendingLeagueCode} onClearLeagueCode={() => { setPendingLeagueCode(null); sessionStorage.removeItem("pendingLeagueCode"); }} />;
   }
   if (screen === "show" && activeShow) {
-    return <ShowApp show={activeShow} user={user} allShows={allShows} onGoHome={() => { setScreen("home"); setActiveShow(null); }} />;
+    return <ShowApp show={activeShow} user={user} allShows={allShows} onGoHome={() => { setScreen("home"); setActiveShow(null); }} pendingLeagueCode={pendingLeagueCode} onClearLeagueCode={() => { setPendingLeagueCode(null); sessionStorage.removeItem("pendingLeagueCode"); }} />;
   }
+
+  const handleDismissOnboarding = async () => {
+    setShowOnboarding(false);
+    if (user) await supabase.from("profiles").update({ has_seen_onboarding: true }).eq("id", user.id);
+  };
 
   return (
     <>
@@ -4017,6 +4119,7 @@ export default function App() {
         onGoAdmin={() => setScreen("admin")}
         allShows={allShows}
       />
+      {showOnboarding && <OnboardingModal onDismiss={handleDismissOnboarding} />}
       <Analytics />
     </>
   );
