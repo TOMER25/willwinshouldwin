@@ -1496,7 +1496,7 @@ function Community({ currentUserId, show, winners = {}, pendingLeagueCode = null
                       const isWinner = winners[cat.id] && winners[cat.id] === item.nom;
                       return (
                         <div key={item.nom} className="community-row">
-                          <span className="community-nom">{isWinner && <span className="community-winner-trophy" style={{ marginRight: "5px" }}>🏆</span>}{item.nom}</span>
+                          <span className="community-nom">{isWinner && <span className="winner-trophy">★ </span>}{item.nom}</span>
                           {item.will_win_pct > 0 && <span className="agg-badge will-agg">{Math.round(item.will_win_pct)}%</span>}
                           {item.should_win_pct > 0 && <span className="agg-badge should-agg">{Math.round(item.should_win_pct)}%</span>}
                         </div>
