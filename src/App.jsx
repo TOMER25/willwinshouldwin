@@ -660,7 +660,7 @@ function ShowApp({ show, user, allShows, onGoHome, defaultView = "picks", pendin
           onShowResults={() => setShowResultsModal(true)}
         />
       )}
-      {view === "community" && <Community currentUserId={user.id} show={show} pendingLeagueCode={pendingLeagueCode} onClearLeagueCode={onClearLeagueCode} />}
+      {view === "community" && <Community currentUserId={user.id} show={show} winners={winners} pendingLeagueCode={pendingLeagueCode} onClearLeagueCode={onClearLeagueCode} />}
       {view === "leaderboard" && <Leaderboard currentUserId={user.id} show={show} />}
       {view === "profile" && <Profile user={user} picks={picks} show={show} />}
       {view === "glossary" && <GlossaryView />}
@@ -1379,7 +1379,7 @@ function LbBreakdownChart({ data, players }) {
 // ============================================================
 // COMMUNITY
 // ============================================================
-function Community({ currentUserId, show, pendingLeagueCode = null, onClearLeagueCode = null }) {
+function Community({ currentUserId, show, winners = {}, pendingLeagueCode = null, onClearLeagueCode = null }) {
   const [tab, setTab] = useState(pendingLeagueCode ? "leagues" : "community"); // "community" | "compare" | "leagues"
   const [allPicks, setAllPicks] = useState({});
   const [loading, setLoading] = useState(true);
@@ -1492,13 +1492,16 @@ function Community({ currentUserId, show, pendingLeagueCode = null, onClearLeagu
                 return (
                   <div key={cat.id} className="community-card">
                     <h4>{cat.name}</h4>
-                    {sorted.map(item => (
-                      <div key={item.nom} className="community-row">
-                        <span className="community-nom">{item.nom}</span>
-                        {item.will_win_pct > 0 && <span className="agg-badge will-agg">{Math.round(item.will_win_pct)}%</span>}
-                        {item.should_win_pct > 0 && <span className="agg-badge should-agg">{Math.round(item.should_win_pct)}%</span>}
-                      </div>
-                    ))}
+                    {sorted.map(item => {
+                      const isWinner = winners[cat.id] && winners[cat.id] === item.nom;
+                      return (
+                        <div key={item.nom} className="community-row">
+                          <span className="community-nom">{isWinner && <span className="community-winner-trophy" style={{ marginRight: "5px" }}>🏆</span>}{item.nom}</span>
+                          {item.will_win_pct > 0 && <span className="agg-badge will-agg">{Math.round(item.will_win_pct)}%</span>}
+                          {item.should_win_pct > 0 && <span className="agg-badge should-agg">{Math.round(item.should_win_pct)}%</span>}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
@@ -3077,21 +3080,6 @@ function Profile({ user, picks, show }) {
           )}
         </div>
 
-        {/* ── Accuracy stats (post-ceremony) ── */}
-        {winnersAnnounced && (
-          <div className="profile-stats">
-            <div className="stat-box">
-              <span className="stat-num gold">{willWinCorrect}/{totalAnswered}</span>
-              <span className="stat-label">★ Will Win correct</span>
-              <div className="stat-bar-track"><div className="stat-bar-fill gold" style={{ width: `${totalAnswered ? (willWinCorrect / totalAnswered) * 100 : 0}%` }} /></div>
-            </div>
-            <div className="stat-box">
-              <span className="stat-num crimson">{shouldWinCorrect}/{totalAnswered}</span>
-              <span className="stat-label">♥ Should Win matched</span>
-              <div className="stat-bar-track"><div className="stat-bar-fill crimson" style={{ width: `${totalAnswered ? (shouldWinCorrect / totalAnswered) * 100 : 0}%` }} /></div>
-            </div>
-          </div>
-        )}
         {!winnersAnnounced && (
           <div className="profile-pending-note">
             Accuracy scores will appear here after {show.date || "the ceremony"}.
