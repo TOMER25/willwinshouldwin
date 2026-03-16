@@ -1128,7 +1128,10 @@ function Leaderboard({ currentUserId, show }) {
   // Race: cumulative scores per category (in show order) for top 3 + you
   const racePlayers = breakdownPlayers;
   let raceCumulative = racePlayers.map(() => 0);
-  const raceData = show.categories.map((cat, idx) => {
+  const raceCategories = [...show.categories].sort((a, b) =>
+    (a.race_sort_order ?? a.sort_order ?? 999) - (b.race_sort_order ?? b.sort_order ?? 999)
+  );
+  const raceData = raceCategories.map((cat, idx) => {
     const point = { cat: cat.name.length > 10 ? cat.name.slice(0, 9) + "…" : cat.name };
     racePlayers.forEach((p, pi) => {
       const h = p.catMap[cat.id];
@@ -2488,7 +2491,7 @@ function Profile({ user, picks, show }) {
         year: s.year, date: s.date, status: s.status,
         ballots_open: s.ballots_open !== false,
         results_published: s.results_published === true,
-        categories: (cats || []).map(c => ({ id: c.id, name: c.name, nominees: c.nominees })),
+        categories: (cats || []).map(c => ({ id: c.id, name: c.name, nominees: c.nominees, sort_order: c.sort_order, race_sort_order: c.race_sort_order })),
       };
     }));
     setAllShows(shows);
@@ -3573,6 +3576,11 @@ function AdminPanel({ onBack }) {
   const [winners, setWinners] = useState({});
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
+  const [raceOrderOpen, setRaceOrderOpen] = useState(false);
+  const [raceOrder, setRaceOrder] = useState([]);
+  const [raceDragIdx, setRaceDragIdx] = useState(null);
+  const [raceSaving, setRaceSaving] = useState(false);
+  const [raceSaveMsg, setRaceSaveMsg] = useState("");
 
   const login = () => {
     if (pw === ADMIN_PASSWORD) {
@@ -3593,7 +3601,7 @@ function AdminPanel({ onBack }) {
         year: s.year, date: s.date, status: s.status,
         ballots_open: s.ballots_open !== false,
         results_published: s.results_published === true,
-        categories: (cats || []).map(c => ({ id: c.id, name: c.name, nominees: c.nominees })),
+        categories: (cats || []).map(c => ({ id: c.id, name: c.name, nominees: c.nominees, sort_order: c.sort_order, race_sort_order: c.race_sort_order })),
       };
     }));
     setDbShows(shows);
@@ -3603,6 +3611,10 @@ function AdminPanel({ onBack }) {
       const current = shows.find(s => s.id === selectedShow?.id) || shows[0];
       setSelectedShow(current);
       loadWinners(current.id);
+      const sorted = [...current.categories].sort((a, b) =>
+        (a.race_sort_order ?? a.sort_order ?? 999) - (b.race_sort_order ?? b.sort_order ?? 999)
+      );
+      setRaceOrder(sorted.map(c => ({ id: c.id, name: c.name })));
     }
   };
 
@@ -3616,9 +3628,42 @@ function AdminPanel({ onBack }) {
   const handleShowChange = (show) => {
     setSelectedShow(show);
     loadWinners(show.id);
+    const sorted = [...show.categories].sort((a, b) =>
+      (a.race_sort_order ?? a.sort_order ?? 999) - (b.race_sort_order ?? b.sort_order ?? 999)
+    );
+    setRaceOrder(sorted.map(c => ({ id: c.id, name: c.name })));
+    setRaceOrderOpen(false);
+    setRaceSaveMsg("");
   };
 
-  const handleWinnerChange = (catId, value) => {
+  const saveRaceOrder = async () => {
+    setRaceSaving(true);
+    setRaceSaveMsg("");
+    const updates = raceOrder.map((cat, idx) =>
+      supabase.from("db_show_categories")
+        .update({ race_sort_order: idx })
+        .eq("id", cat.id)
+        .eq("show_id", selectedShow.id)
+    );
+    await Promise.all(updates);
+    setRaceSaving(false);
+    setRaceSaveMsg("✓ Order saved");
+    setTimeout(() => setRaceSaveMsg(""), 3000);
+  };
+
+  const handleRaceDragStart = (idx) => setRaceDragIdx(idx);
+  const handleRaceDragOver = (e, idx) => {
+    e.preventDefault();
+    if (raceDragIdx === null || raceDragIdx === idx) return;
+    setRaceOrder(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(raceDragIdx, 1);
+      next.splice(idx, 0, moved);
+      return next;
+    });
+    setRaceDragIdx(idx);
+  };
+  const handleRaceDragEnd = () => setRaceDragIdx(null);
     setWinners(prev => ({ ...prev, [catId]: value }));
   };
 
@@ -3755,6 +3800,36 @@ function AdminPanel({ onBack }) {
                   );
                 })}
               </div>
+            </div>
+
+            {/* Score Race Order */}
+            <div className="admin-section admin-race-order-section">
+              <button className="admin-race-order-toggle" onClick={() => setRaceOrderOpen(o => !o)}>
+                <span>🏁 Score Race Category Order</span>
+                <span className="admin-race-order-chevron">{raceOrderOpen ? "▲" : "▼"}</span>
+              </button>
+              {raceOrderOpen && (
+                <div className="admin-race-order-body">
+                  <p className="admin-hint" style={{ marginBottom: "0.75rem" }}>Drag categories into the order they were announced. This only affects the Score Race chart.</p>
+                  <div className="admin-race-order-list">
+                    {raceOrder.map((cat, idx) => (
+                      <div key={cat.id} className={`admin-race-order-item${raceDragIdx === idx ? " dragging" : ""}`}
+                        draggable onDragStart={() => handleRaceDragStart(idx)}
+                        onDragOver={e => handleRaceDragOver(e, idx)} onDragEnd={handleRaceDragEnd}>
+                        <span className="admin-race-order-handle">⠿</span>
+                        <span className="admin-race-order-num">{idx + 1}</span>
+                        <span className="admin-race-order-name">{cat.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="admin-save-row" style={{ marginTop: "0.75rem" }}>
+                    {raceSaveMsg && <span className="save-indicator saved">{raceSaveMsg}</span>}
+                    <button className="auth-submit admin-save-btn" onClick={saveRaceOrder} disabled={raceSaving}>
+                      {raceSaving ? "Saving…" : "Save Race Order"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -4184,7 +4259,7 @@ export default function App() {
         year: s.year, date: s.date, status: s.status,
         ballots_open: s.ballots_open !== false,
         results_published: s.results_published === true,
-        categories: (cats || []).map(c => ({ id: c.id, name: c.name, nominees: c.nominees })),
+        categories: (cats || []).map(c => ({ id: c.id, name: c.name, nominees: c.nominees, sort_order: c.sort_order, race_sort_order: c.race_sort_order })),
       };
     }));
     setAllShows(shows);

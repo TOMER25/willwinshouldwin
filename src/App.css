@@ -2158,3 +2158,17 @@ body {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+
+/* ── Score Race Order (Admin) ── */
+.admin-race-order-section { margin-top: 1.5rem; padding: 0; border: 1px solid rgba(201,168,76,0.2); border-radius: 10px; overflow: hidden; }
+.admin-race-order-toggle { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 0.85rem 1.25rem; background: rgba(201,168,76,0.05); border: none; color: #c9a84c; font-family: 'DM Mono', monospace; font-size: 0.8rem; letter-spacing: 0.08em; cursor: pointer; text-transform: uppercase; }
+.admin-race-order-toggle:hover { background: rgba(201,168,76,0.1); }
+.admin-race-order-chevron { font-size: 0.65rem; }
+.admin-race-order-body { padding: 1rem 1.25rem 1.25rem; }
+.admin-race-order-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.admin-race-order-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.75rem; background: #1b2030; border: 1px solid rgba(255,255,255,0.07); border-radius: 6px; cursor: grab; user-select: none; transition: background 0.15s; }
+.admin-race-order-item:hover { background: #222840; }
+.admin-race-order-item.dragging { opacity: 0.4; border-color: #c9a84c; }
+.admin-race-order-handle { color: #555; font-size: 1rem; cursor: grab; }
+.admin-race-order-num { color: #c9a84c; font-family: 'DM Mono', monospace; font-size: 0.75rem; min-width: 1.5rem; }
+.admin-race-order-name { color: #ccc; font-size: 0.85rem; }
