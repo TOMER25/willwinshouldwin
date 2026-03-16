@@ -3672,10 +3672,11 @@ function AdminPanel({ onBack }) {
               <div className="admin-winners-grid">
                 {selectedShow.categories.map(cat => {
                   const raw = winners[cat.id] || "";
-                  const parts = raw.split("|").filter(Boolean);
-                  const first = parts[0] || "";
-                  const second = parts[1] || "";
-                  const hasTie = !!second;
+                  const pipeIdx = raw.indexOf("|");
+                  const hasPipe = pipeIdx !== -1;
+                  const first = hasPipe ? raw.slice(0, pipeIdx) : raw;
+                  const second = hasPipe ? raw.slice(pipeIdx + 1) : "";
+                  const hasTie = hasPipe;
                   return (
                     <div key={cat.id} className="admin-winner-row">
                       <label className="admin-cat-label">
