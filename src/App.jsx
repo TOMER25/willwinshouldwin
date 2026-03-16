@@ -1380,8 +1380,8 @@ function LbBreakdownChart({ data, players }) {
           fontFamily: "'DM Mono', monospace", fontSize: 9,
           letterSpacing: 1, paddingTop: 8, color: "var(--text-muted)"
         }} />
-        {players.map(p => (
-          <Bar key={p.uid} dataKey={p.name} fill={p.color}
+        {players.map((p, i) => (
+          <Bar key={p.uid} dataKey={p.name} fill={RACE_COLORS[i % RACE_COLORS.length]}
             opacity={p.isYou ? 0.9 : 0.6} radius={[0,3,3,0]} />
         ))}
       </BarChart>
