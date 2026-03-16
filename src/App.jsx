@@ -468,7 +468,9 @@ function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin, allShows }) {
           <h2 className="shows-heading">Award Shows</h2>
           <div className="shows-grid">
             {allShows.map(show => {
-              const badge = statusLabel(show.status);
+              const badge = show.status === "active" && show.ballots_open === false
+                ? { text: "Ballots closed", cls: "badge-completed" }
+                : statusLabel(show.status);
               const isUpcoming = show.status === "upcoming";
               return (
                 <button
@@ -484,7 +486,7 @@ function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin, allShows }) {
                   {show.org && <p className="show-org">{show.org}</p>}
                   {show.date && <p className="show-date">{show.date}</p>}
                   <p className="show-cats">{show.categories.length} categories</p>
-                  {!isUpcoming && <div className="show-cta">Make your picks →</div>}
+                  {!isUpcoming && <div className="show-cta">{show.ballots_open === false ? "View results →" : "Make your picks →"}</div>}
                 </button>
               );
             })}
