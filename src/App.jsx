@@ -1867,6 +1867,7 @@ function ResultsModal({ show, picks, winners, user, onClose }) {
         {showCard ? (
           <BallotCard
             show={show}
+            picks={picks}
             displayName={displayName}
             willCorrect={willCorrect}
             shouldCorrect={shouldCorrect}
@@ -1926,7 +1927,7 @@ function ResultsModal({ show, picks, winners, user, onClose }) {
 // ============================================================
 // BALLOT CARD (shareable summary image)
 // ============================================================
-function BallotCard({ show, displayName, willCorrect, shouldCorrect, totalWithWinners, highlights, onBack, onClose }) {
+function BallotCard({ show, picks, displayName, willCorrect, shouldCorrect, totalWithWinners, highlights, onBack, onClose }) {
   const canvasRef = useRef(null);
   const [generated, setGenerated] = useState(false);
 
@@ -2034,7 +2035,7 @@ function BallotCard({ show, displayName, willCorrect, shouldCorrect, totalWithWi
         ctx.fillStyle = "#c9a84c";
         ctx.fillText("✓", 60, y);
         ctx.fillStyle = "#8890a8";
-        ctx.fillText(`${cat.name}  ·  ${show.categories.find(c => c.id === cat.id) ? show.categories.find(c => c.id === cat.id).nominees[0] : ""}`, 80, y);
+        ctx.fillText(`${cat.name}  ·  ${picks[cat.id]?.will_win || ""}`, 80, y);
       });
     }
 
@@ -3672,11 +3673,10 @@ function AdminPanel({ onBack }) {
               <div className="admin-winners-grid">
                 {selectedShow.categories.map(cat => {
                   const raw = winners[cat.id] || "";
-                  const pipeIdx = raw.indexOf("|");
-                  const hasPipe = pipeIdx !== -1;
-                  const first = hasPipe ? raw.slice(0, pipeIdx) : raw;
-                  const second = hasPipe ? raw.slice(pipeIdx + 1) : "";
-                  const hasTie = hasPipe;
+                  const parts = raw.split("|").filter(Boolean);
+                  const first = parts[0] || "";
+                  const second = parts[1] || "";
+                  const hasTie = !!second;
                   return (
                     <div key={cat.id} className="admin-winner-row">
                       <label className="admin-cat-label">
