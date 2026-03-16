@@ -3664,6 +3664,8 @@ function AdminPanel({ onBack }) {
     setRaceDragIdx(idx);
   };
   const handleRaceDragEnd = () => setRaceDragIdx(null);
+
+  const handleWinnerChange = (catId, value) => {
     setWinners(prev => ({ ...prev, [catId]: value }));
   };
 
@@ -4322,4 +4324,3 @@ export default function App() {
     </>
   );
 }
-
