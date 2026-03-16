@@ -1132,7 +1132,7 @@ function Leaderboard({ currentUserId, show }) {
     const point = { cat: cat.name.length > 10 ? cat.name.slice(0, 9) + "…" : cat.name };
     racePlayers.forEach((p, pi) => {
       const h = p.catMap[cat.id];
-      if (h) raceCumulative[pi] += (h.wHit ? 1 : 0) + (h.sHit ? 1 : 0);
+      if (h) raceCumulative[pi] += (h.wHit ? 1 : 0);
       point[p.name] = raceCumulative[pi];
     });
     return point;
