@@ -3385,6 +3385,34 @@ function ManageShows({ dbShows, onRefresh }) {
     onRefresh();
   };
 
+  const sendResultsEmails = async (showId) => {
+    if (!window.confirm("Send results emails to all users with picks?")) return;
+    setSaving(showId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${SUPABASE_URL}/functions/v1/send-results-email`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ show_id: showId }),
+        }
+      );
+      const result = await res.json();
+      if (res.ok) {
+        window.alert(`✅ Sent to ${result.sent}/${result.total} users`);
+      } else {
+        window.alert(`❌ Error: ${result.error}`);
+      }
+    } catch (err) {
+      window.alert(`❌ Error: ${err.message}`);
+    }
+    setSaving(null);
+  };
+
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
     if (deleteTarget.status === "active") {
@@ -3499,6 +3527,21 @@ function ManageShows({ dbShows, onRefresh }) {
                 {show.results_published ? "Published ✓" : "Hidden ✗"}
               </button>
             </div>
+
+            {/* Send results emails */}
+            {show.results_published && (
+              <div className="manage-control-group">
+                <label className="manage-control-label">Notify</label>
+                <button
+                  className="lifecycle-toggle toggle-on"
+                  style={{ background: "transparent", border: "1px solid #c9a84c", color: "#c9a84c" }}
+                  onClick={() => sendResultsEmails(show.id)}
+                  disabled={saving === show.id}
+                >
+                  📧 Email Users
+                </button>
+              </div>
+            )}
 
             {/* Delete */}
             <div className="manage-control-group">
