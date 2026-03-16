@@ -3,7 +3,7 @@ import { Analytics } from "@vercel/analytics/react";
 import { createClient } from "@supabase/supabase-js";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer,
-  LineChart, Line, Legend,
+  LineChart, Line, Legend, CartesianGrid,
 } from "recharts";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "YOUR_SUPABASE_URL";
@@ -1610,9 +1610,9 @@ function Community({ currentUserId, show, winners = {}, pendingLeagueCode = null
 // LEAGUES
 // ============================================================
 function Leagues({ currentUserId, show, allProfiles, pendingLeagueCode = null, onClearLeagueCode = null }) {
-  const [leagues, setLeagues] = useState([]);       // leagues I belong to
+  const [leagues, setLeagues] = useState([]);
   const [activeLeague, setActiveLeague] = useState(null);
-  const [leagueView, setLeagueView] = useState(pendingLeagueCode ? "join" : "list"); // "list" | "detail" | "create" | "join"
+  const [leagueView, setLeagueView] = useState(pendingLeagueCode ? "join" : "list");
   const [loading, setLoading] = useState(true);
 
   // Create form state
@@ -1630,6 +1630,17 @@ function Leagues({ currentUserId, show, allProfiles, pendingLeagueCode = null, o
   const [leagueWinners, setLeagueWinners] = useState({});
   const [memberPicks, setMemberPicks] = useState({});
   const [copiedCode, setCopiedCode] = useState(false);
+
+  // Detail tab state
+  const [detailTab, setDetailTab] = useState("leaderboard"); // "leaderboard" | "race" | "accuracy" | "category" | "h2h"
+
+  // Admin state
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [removingMember, setRemovingMember] = useState(null);
 
   useEffect(() => { loadLeagues(); }, [show.id]);
 
@@ -1727,14 +1738,82 @@ function Leagues({ currentUserId, show, allProfiles, pendingLeagueCode = null, o
 
   const winnersAnnounced = Object.keys(leagueWinners).length > 0;
 
+  // Admin: rename
+  const startRename = () => { setRenameValue(activeLeague.name); setIsRenaming(true); };
+  const saveRename = async () => {
+    if (!renameValue.trim() || renameValue.trim() === activeLeague.name) { setIsRenaming(false); return; }
+    setRenameSaving(true);
+    const { error } = await supabase.from("leagues").update({ name: renameValue.trim() }).eq("id", activeLeague.id);
+    if (!error) {
+      const updated = { ...activeLeague, name: renameValue.trim() };
+      setActiveLeague(updated);
+      setLeagues(prev => prev.map(l => l.id === updated.id ? updated : l));
+    }
+    setRenameSaving(false);
+    setIsRenaming(false);
+  };
+
+  // Admin: toggle privacy
+  const togglePrivacy = async () => {
+    const newVal = !activeLeague.is_private;
+    const { error } = await supabase.from("leagues").update({ is_private: newVal }).eq("id", activeLeague.id);
+    if (!error) {
+      const updated = { ...activeLeague, is_private: newVal };
+      setActiveLeague(updated);
+      setLeagues(prev => prev.map(l => l.id === updated.id ? updated : l));
+    }
+  };
+
+  // Admin: remove member
+  const removeMember = async (userId) => {
+    setRemovingMember(userId);
+    await supabase.from("league_members").delete().eq("league_id", activeLeague.id).eq("user_id", userId);
+    setLeagueMembers(prev => prev.filter(m => m.id !== userId));
+    setRemovingMember(null);
+  };
+
+  // Admin: delete league
+  const deleteLeague = async () => {
+    setDeleting(true);
+    await supabase.from("league_members").delete().eq("league_id", activeLeague.id);
+    await supabase.from("leagues").delete().eq("id", activeLeague.id);
+    setDeleting(false);
+    setShowDeleteConfirm(false);
+    setLeagueView("list");
+    setActiveLeague(null);
+    loadLeagues();
+  };
+
+  const isOwner = activeLeague && activeLeague.owner_id === currentUserId;
+
   // Compute leaderboard for active league
   const leagueLeaderboard = leagueMembers.map(member => {
     const picks = memberPicks[member.id] || {};
     const willCorrect = Object.entries(leagueWinners).filter(([catId, winner]) => isPickCorrect(picks[catId]?.will_win, winner)).length;
     const shouldCorrect = Object.entries(leagueWinners).filter(([catId, winner]) => isPickCorrect(picks[catId]?.should_win, winner)).length;
+    const willTotal = show.categories.filter(c => picks[c.id]?.will_win).length;
     const bothPicked = show.categories.filter(c => picks[c.id]?.will_win && picks[c.id]?.should_win).length;
-    return { ...member, willCorrect, shouldCorrect, total: willCorrect, bothPicked };
+    const totalAnnounced = Object.keys(leagueWinners).length;
+    const accuracyPct = totalAnnounced > 0 ? Math.round((willCorrect / totalAnnounced) * 100) : 0;
+    return { ...member, willCorrect, shouldCorrect, total: willCorrect, bothPicked, willTotal, accuracyPct };
   }).sort((a, b) => b.total - a.total || b.willCorrect - a.willCorrect);
+
+  // Score race data: cumulative per category in show order
+  const raceData = (() => {
+    if (!winnersAnnounced || leagueLeaderboard.length === 0) return [];
+    const catIds = show.categories.map(c => c.id).filter(id => leagueWinners[id]);
+    const running = {};
+    leagueLeaderboard.forEach(m => { running[m.id] = 0; });
+    return catIds.map((catId, i) => {
+      leagueLeaderboard.forEach(m => {
+        const p = memberPicks[m.id] || {};
+        if (isPickCorrect(p[catId]?.will_win, leagueWinners[catId])) running[m.id]++;
+      });
+      const point = { name: show.categories.find(c => c.id === catId)?.name?.replace(/Best\s+/i, "") || `#${i+1}` };
+      leagueLeaderboard.forEach(m => { point[m.id] = running[m.id]; });
+      return point;
+    });
+  })();
 
   if (loading) return <div className="loading">Loading leagues…</div>;
 
@@ -1805,58 +1884,241 @@ function Leagues({ currentUserId, show, allProfiles, pendingLeagueCode = null, o
   );
 
   // ── DETAIL VIEW ──
-  if (leagueView === "detail" && activeLeague) return (
-    <div className="leagues-wrap">
-      <div className="league-detail-header">
-        <button className="back-btn" onClick={() => { setLeagueView("list"); setActiveLeague(null); }}>← Leagues</button>
-        <h3 className="compare-title">{activeLeague.name}</h3>
-      </div>
+  if (leagueView === "detail" && activeLeague) {
+    const MEMBER_COLORS = ["#c9a84c","#c94c5e","#6c8ebf","#82b366","#d79b00","#9673a6","#23a7c5","#e07070"];
+    const memberName = (m) => m.id === currentUserId ? "You" : (m.display_name || "Member");
 
-      {/* Invite link */}
-      <div className="league-invite-row">
-        <span className="league-invite-label">Invite link</span>
-        <span className="league-invite-url">{window.location.origin}/?league={activeLeague.invite_code}</span>
-        <button className="copy-link-btn" onClick={() => copyInvite(activeLeague.invite_code)}>
-          {copiedCode ? "Copied!" : "Copy link"}
-        </button>
-      </div>
-
-      {/* Leaderboard */}
-      <div className="league-section">
-        <p className="profile-section-label">{winnersAnnounced ? "Leaderboard" : "Members & Progress"}</p>
-        <div className="league-lb">
-          <div className="league-lb-header">
-            <span>Name</span>
-            {winnersAnnounced ? <><span>★</span><span>♥</span><span>Total</span></> : <span>Ballot</span>}
+    return (
+      <div className="leagues-wrap">
+        {/* Header */}
+        <div className="league-detail-header">
+          <button className="back-btn" onClick={() => { setLeagueView("list"); setActiveLeague(null); setShowDeleteConfirm(false); }}>← Leagues</button>
+          <div className="league-title-row">
+            {isRenaming ? (
+              <div className="league-rename-wrap">
+                <input className="league-rename-input" value={renameValue} autoFocus
+                  onChange={e => setRenameValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") saveRename(); if (e.key === "Escape") setIsRenaming(false); }} />
+                <button className="league-rename-save" onClick={saveRename} disabled={renameSaving}>{renameSaving ? "…" : "Save"}</button>
+                <button className="league-rename-cancel" onClick={() => setIsRenaming(false)}>✕</button>
+              </div>
+            ) : (
+              <div className="league-title-with-edit">
+                <h3 className="compare-title">{activeLeague.name}</h3>
+                {isOwner && <button className="league-edit-btn" onClick={startRename} title="Rename league">✎</button>}
+              </div>
+            )}
+            {isOwner && (
+              <div className="league-admin-pills">
+                <button className={`league-privacy-pill ${activeLeague.is_private ? "private" : "public"}`} onClick={togglePrivacy}>
+                  {activeLeague.is_private ? "🔒 Private" : "🌐 Public"}
+                </button>
+              </div>
+            )}
           </div>
-          {leagueLeaderboard.map((member, i) => (
-            <div key={member.id} className={`league-lb-row ${member.id === currentUserId ? "league-lb-you" : ""}`}>
-              <span className="lb-rank">#{i + 1}</span>
-              <span className="lb-name">
-                {member.id === currentUserId ? "You" : (member.display_name || "Member")}
-              </span>
-              {winnersAnnounced ? (
-                <>
-                  <span className="lb-score">{member.willCorrect}</span>
-                  <span className="lb-score">{member.shouldCorrect}</span>
-                  <span className="lb-total">{member.total}</span>
-                </>
-              ) : (
-                <span className="lb-score">{member.bothPicked}/{show.categories.length}</span>
-              )}
-            </div>
+        </div>
+
+        {/* Invite link */}
+        <div className="league-invite-row">
+          <span className="league-invite-label">Invite link</span>
+          <span className="league-invite-url">{window.location.origin}/?league={activeLeague.invite_code}</span>
+          <button className="copy-link-btn" onClick={() => copyInvite(activeLeague.invite_code)}>
+            {copiedCode ? "Copied!" : "Copy link"}
+          </button>
+        </div>
+
+        {/* Tab bar */}
+        <div className="league-tabs">
+          {[
+            { id: "leaderboard", label: "Standings" },
+            ...(winnersAnnounced ? [
+              { id: "race", label: "Score Race" },
+              { id: "accuracy", label: "Accuracy" },
+              { id: "category", label: "By Category" },
+              { id: "h2h", label: "Head-to-Head" },
+            ] : []),
+          ].map(t => (
+            <button key={t.id} className={`league-tab ${detailTab === t.id ? "active" : ""}`} onClick={() => setDetailTab(t.id)}>{t.label}</button>
           ))}
         </div>
+
+        {/* ── TAB: STANDINGS ── */}
+        {detailTab === "leaderboard" && (
+          <div className="league-section">
+            <div className="league-lb">
+              <div className="league-lb-header">
+                <span>Name ▲</span>
+                {winnersAnnounced ? <><span>★</span><span>♥</span><span>Total</span></> : <span>Ballot</span>}
+                {isOwner && <span></span>}
+              </div>
+              {leagueLeaderboard.map((member, i) => (
+                <div key={member.id} className={`league-lb-row ${member.id === currentUserId ? "league-lb-you" : ""}`}>
+                  <span className="lb-rank">#{i + 1}</span>
+                  <span className="lb-name">{memberName(member)}</span>
+                  {winnersAnnounced ? (
+                    <>
+                      <span className="lb-score">{member.willCorrect}</span>
+                      <span className="lb-score">{member.shouldCorrect}</span>
+                      <span className="lb-total">{member.total}</span>
+                    </>
+                  ) : (
+                    <span className="lb-score">{member.bothPicked}/{show.categories.length}</span>
+                  )}
+                  {isOwner && member.id !== currentUserId && (
+                    <button className="lb-remove-btn" onClick={() => removeMember(member.id)} disabled={removingMember === member.id} title="Remove from league">
+                      {removingMember === member.id ? "…" : "✕"}
+                    </button>
+                  )}
+                  {isOwner && member.id === currentUserId && <span></span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB: SCORE RACE ── */}
+        {detailTab === "race" && winnersAnnounced && (
+          <div className="league-chart-section">
+            <p className="league-chart-desc">Cumulative correct Will Win picks as winners were announced.</p>
+            {raceData.length === 0 ? (
+              <p className="league-no-data">No results yet.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={raceData} margin={{ top: 8, right: 16, bottom: 40, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis dataKey="name" tick={{ fill: "var(--text-muted)", fontSize: 9 }} angle={-45} textAnchor="end" interval={0} />
+                  <YAxis tick={{ fill: "var(--text-muted)", fontSize: 10 }} allowDecimals={false} />
+                  <Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} labelStyle={{ color: "var(--text-muted)" }} itemStyle={{ color: "var(--white)" }} />
+                  {leagueLeaderboard.map((m, i) => (
+                    <Line key={m.id} type="monotone" dataKey={m.id} name={memberName(m)}
+                      stroke={MEMBER_COLORS[i % MEMBER_COLORS.length]} strokeWidth={2}
+                      dot={false} activeDot={{ r: 4 }} />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB: ACCURACY ── */}
+        {detailTab === "accuracy" && winnersAnnounced && (
+          <div className="league-chart-section">
+            <p className="league-chart-desc">Will Win accuracy — correct picks out of categories announced so far.</p>
+            <ResponsiveContainer width="100%" height={Math.max(160, leagueLeaderboard.length * 48)}>
+              <BarChart data={leagueLeaderboard.map(m => ({ name: memberName(m), pct: m.accuracyPct, id: m.id }))}
+                layout="vertical" margin={{ top: 4, right: 40, bottom: 4, left: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" horizontal={false} />
+                <XAxis type="number" domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fill: "var(--text-muted)", fontSize: 10 }} />
+                <YAxis type="category" dataKey="name" tick={{ fill: "var(--white)", fontSize: 12, fontWeight: 600 }} width={72} />
+                <Tooltip formatter={v => `${v}%`} contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
+                <Bar dataKey="pct" radius={[0, 4, 4, 0]}>
+                  {leagueLeaderboard.map((m, i) => (
+                    <Cell key={m.id} fill={MEMBER_COLORS[i % MEMBER_COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* ── TAB: BY CATEGORY ── */}
+        {detailTab === "category" && winnersAnnounced && (
+          <div className="league-chart-section">
+            <p className="league-chart-desc">Who got each category right.</p>
+            <div className="league-cat-grid">
+              {show.categories.filter(c => leagueWinners[c.id]).map(cat => (
+                <div key={cat.id} className="league-cat-card">
+                  <div className="league-cat-name">{cat.name.replace(/Best\s+/i, "")}</div>
+                  <div className="league-cat-members">
+                    {leagueLeaderboard.map((m, i) => {
+                      const pick = (memberPicks[m.id] || {})[cat.id];
+                      const correct = isPickCorrect(pick?.will_win, leagueWinners[cat.id]);
+                      return (
+                        <span key={m.id} className={`league-cat-dot ${correct ? "hit" : "miss"}`}
+                          style={correct ? { background: MEMBER_COLORS[i % MEMBER_COLORS.length] } : {}}
+                          title={`${memberName(m)}: ${correct ? "✓" : "✗"}`}>
+                          {memberName(m).slice(0, 1)}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB: HEAD-TO-HEAD ── */}
+        {detailTab === "h2h" && winnersAnnounced && (
+          <div className="league-chart-section">
+            <p className="league-chart-desc">Cells show how many categories row player beat column player on Will Win picks.</p>
+            <div className="league-h2h-wrap">
+              <div className="league-h2h-table" style={{ gridTemplateColumns: `minmax(72px,auto) repeat(${leagueLeaderboard.length}, 1fr)` }}>
+                {/* Header row */}
+                <div className="h2h-corner"></div>
+                {leagueLeaderboard.map((m, i) => (
+                  <div key={m.id} className="h2h-col-header" style={{ color: MEMBER_COLORS[i % MEMBER_COLORS.length] }}>
+                    {memberName(m).slice(0, 6)}
+                  </div>
+                ))}
+                {/* Data rows */}
+                {leagueLeaderboard.map((rowM, ri) => {
+                  const rowPicks = memberPicks[rowM.id] || {};
+                  return [
+                    <div key={`row-${rowM.id}`} className="h2h-row-header" style={{ color: MEMBER_COLORS[ri % MEMBER_COLORS.length] }}>
+                      {memberName(rowM).slice(0, 6)}
+                    </div>,
+                    ...leagueLeaderboard.map((colM, ci) => {
+                      if (rowM.id === colM.id) return <div key={`self-${rowM.id}`} className="h2h-cell h2h-self">—</div>;
+                      const colPicks = memberPicks[colM.id] || {};
+                      let rowWins = 0, colWins = 0;
+                      show.categories.filter(c => leagueWinners[c.id]).forEach(c => {
+                        const rHit = isPickCorrect(rowPicks[c.id]?.will_win, leagueWinners[c.id]);
+                        const cHit = isPickCorrect(colPicks[c.id]?.will_win, leagueWinners[c.id]);
+                        if (rHit && !cHit) rowWins++;
+                        if (cHit && !rHit) colWins++;
+                      });
+                      const dominated = rowWins > colWins;
+                      const tied = rowWins === colWins;
+                      return (
+                        <div key={`${rowM.id}-${colM.id}`} className={`h2h-cell ${dominated ? "h2h-win" : tied ? "h2h-tie" : "h2h-loss"}`}>
+                          {rowWins}
+                        </div>
+                      );
+                    })
+                  ];
+                })}
+              </div>
+              <p className="league-h2h-key">
+                <span className="h2h-key-win">■</span> Row beats column &nbsp;
+                <span className="h2h-key-tie">■</span> Tied &nbsp;
+                <span className="h2h-key-loss">■</span> Row trails column
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Bottom actions */}
+        <div className="league-bottom-actions">
+          {activeLeague.owner_id !== currentUserId && (
+            <button className="league-leave-btn" onClick={() => leaveLeague(activeLeague.id)}>Leave league</button>
+          )}
+          {isOwner && !showDeleteConfirm && (
+            <button className="league-delete-btn" onClick={() => setShowDeleteConfirm(true)}>Delete league</button>
+          )}
+          {isOwner && showDeleteConfirm && (
+            <div className="league-delete-confirm">
+              <span className="league-delete-warning">This will permanently delete the league and remove all members.</span>
+              <div className="league-delete-confirm-btns">
+                <button className="league-delete-confirm-yes" onClick={deleteLeague} disabled={deleting}>{deleting ? "Deleting…" : "Yes, delete"}</button>
+                <button className="league-delete-confirm-no" onClick={() => setShowDeleteConfirm(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-
-      {/* Leave button */}
-      <button className="league-leave-btn" onClick={() => leaveLeague(activeLeague.id)}>
-        Leave league
-      </button>
-    </div>
-  );
-
-  return null;
+    );
+  }
 }
 
 // ============================================================
