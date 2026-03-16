@@ -1801,7 +1801,9 @@ function Leagues({ currentUserId, show, allProfiles, pendingLeagueCode = null, o
   // Score race data: cumulative per category in show order
   const raceData = (() => {
     if (!winnersAnnounced || leagueLeaderboard.length === 0) return [];
-    const catIds = show.categories.map(c => c.id).filter(id => leagueWinners[id]);
+    const catIds = [...show.categories]
+      .sort((a, b) => (a.race_sort_order ?? a.sort_order ?? 999) - (b.race_sort_order ?? b.sort_order ?? 999))
+      .map(c => c.id).filter(id => leagueWinners[id]);
     const running = {};
     leagueLeaderboard.forEach(m => { running[m.id] = 0; });
     return catIds.map((catId, i) => {
