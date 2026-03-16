@@ -43,6 +43,20 @@ function extractFilmTitle(nomineeStr) {
   return parts[parts.length - 1].trim();
 }
 
+// Tie-aware winner helpers
+// Winners stored as "Film A" or "Film A|Film B" for ties
+function formatWinner(winner) {
+  if (!winner) return "";
+  const parts = winner.split("|");
+  if (parts.length === 1) return winner;
+  return parts.join(" / ") + " (tie)";
+}
+
+function isPickCorrect(pick, winner) {
+  if (!pick || !winner) return false;
+  return winner.split("|").includes(pick);
+}
+
 // TMDB search + streaming lookup
 async function fetchFilmData(title) {
   if (!TMDB_API_KEY) return null;
@@ -868,7 +882,7 @@ function CategoryCard({ category, userPicks, onPick, aggregates, locked, winner 
         {category.nominees.map(nominee => {
           const isWillWin = willWin === nominee;
           const isShouldWin = shouldWin === nominee;
-          const isWinner = winner === nominee;
+          const isWinner = winner ? winner.split("|").includes(nominee) : false;
           const pct = aggregates?.[category.id]?.[nominee];
           return (
             <div key={nominee} className={`nominee-row ${isWillWin || isShouldWin ? "picked" : ""} ${isWinner ? "nominee-winner" : ""}`}>
@@ -1042,8 +1056,8 @@ function Leaderboard({ currentUserId, show }) {
       if (!userCatMap[pick.user_id]) userCatMap[pick.user_id] = {};
 
       const winner = wm[pick.category_id];
-      const wHit = !!winner && pick.will_win === winner;
-      const sHit = !!winner && pick.should_win === winner;
+      const wHit = isPickCorrect(pick.will_win, winner);
+      const sHit = isPickCorrect(pick.should_win, winner);
       userCatMap[pick.user_id][pick.category_id] = { wHit, sHit };
 
       if (wHit) scoreMap[pick.user_id].will_win++;
@@ -1700,8 +1714,8 @@ function Leagues({ currentUserId, show, allProfiles, pendingLeagueCode = null, o
   // Compute leaderboard for active league
   const leagueLeaderboard = leagueMembers.map(member => {
     const picks = memberPicks[member.id] || {};
-    const willCorrect = Object.entries(leagueWinners).filter(([catId, winner]) => picks[catId]?.will_win === winner).length;
-    const shouldCorrect = Object.entries(leagueWinners).filter(([catId, winner]) => picks[catId]?.should_win === winner).length;
+    const willCorrect = Object.entries(leagueWinners).filter(([catId, winner]) => isPickCorrect(picks[catId]?.will_win, winner)).length;
+    const shouldCorrect = Object.entries(leagueWinners).filter(([catId, winner]) => isPickCorrect(picks[catId]?.should_win, winner)).length;
     const bothPicked = show.categories.filter(c => picks[c.id]?.will_win && picks[c.id]?.should_win).length;
     return { ...member, willCorrect, shouldCorrect, total: willCorrect, bothPicked };
   }).sort((a, b) => b.total - a.total || b.willCorrect - a.willCorrect);
@@ -1836,13 +1850,13 @@ function ResultsModal({ show, picks, winners, user, onClose }) {
   const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "Friend";
   const categories = show.categories;
 
-  const willCorrect = categories.filter(c => winners[c.id] && picks[c.id]?.will_win === winners[c.id]).length;
-  const shouldCorrect = categories.filter(c => winners[c.id] && picks[c.id]?.should_win === winners[c.id]).length;
+  const willCorrect = categories.filter(c => isPickCorrect(picks[c.id]?.will_win, winners[c.id])).length;
+  const shouldCorrect = categories.filter(c => isPickCorrect(picks[c.id]?.should_win, winners[c.id])).length;
   const totalWithWinners = categories.filter(c => winners[c.id]).length;
 
   // Top 3 correct will-win picks for highlights
   const highlights = categories
-    .filter(c => winners[c.id] && picks[c.id]?.will_win === winners[c.id])
+    .filter(c => isPickCorrect(picks[c.id]?.will_win, winners[c.id]))
     .slice(0, 3);
 
   const [showCard, setShowCard] = useState(false);
@@ -1888,7 +1902,7 @@ function ResultsModal({ show, picks, winners, user, onClose }) {
                 {highlights.map(cat => (
                   <div key={cat.id} className="results-highlight-row">
                     <span className="results-highlight-cat">{cat.name}</span>
-                    <span className="results-highlight-pick">{winners[cat.id]}</span>
+                    <span className="results-highlight-pick">{formatWinner(winners[cat.id])}</span>
                   </div>
                 ))}
               </div>
@@ -2329,8 +2343,8 @@ function PicksExportCard({ show, picks, winners, displayName, willColor, shouldC
     ctx.beginPath(); ctx.moveTo(PADDING, footY + 14); ctx.lineTo(W - PADDING, footY + 14); ctx.stroke();
 
     if (resultsMode) {
-      const wc  = categories.filter(c => winners[c.id] && picks[c.id]?.will_win   === winners[c.id]).length;
-      const sc  = categories.filter(c => winners[c.id] && picks[c.id]?.should_win === winners[c.id]).length;
+      const wc  = categories.filter(c => isPickCorrect(picks[c.id]?.will_win,   winners[c.id])).length;
+      const sc  = categories.filter(c => isPickCorrect(picks[c.id]?.should_win, winners[c.id])).length;
       const tot = categories.filter(c => winners[c.id]).length;
       ctx.font = F_SCORE; ctx.textAlign = "left";
       ctx.fillStyle = willColor;   ctx.fillText("\u2605 " + wc + "/" + tot, PADDING,      footY + 40);
@@ -2610,8 +2624,8 @@ function Profile({ user, picks, show }) {
     const shouldPicked = s.categories.filter(c => showPicks[c.id]?.should_win).length;
     const bothPicked = s.categories.filter(c => showPicks[c.id]?.will_win && showPicks[c.id]?.should_win).length;
     const withWinners = s.categories.filter(c => showWinners[c.id]);
-    const willCorrect = withWinners.filter(c => showPicks[c.id]?.will_win === showWinners[c.id]).length;
-    const shouldCorrect = withWinners.filter(c => showPicks[c.id]?.should_win === showWinners[c.id]).length;
+    const willCorrect = withWinners.filter(c => isPickCorrect(showPicks[c.id]?.will_win, showWinners[c.id])).length;
+    const shouldCorrect = withWinners.filter(c => isPickCorrect(showPicks[c.id]?.should_win, showWinners[c.id])).length;
     return { show: s, total, willPicked, shouldPicked, bothPicked, willCorrect, shouldCorrect, graded: withWinners.length };
   });
 
@@ -2637,8 +2651,8 @@ function Profile({ user, picks, show }) {
   const winnersAnnounced = Object.keys(winners).length > 0;
   const categoriesWithWinners = categories.filter(c => winners[c.id]);
   const currentPicks = allPicksByShow[show.id] || picks;
-  const willWinCorrect = categoriesWithWinners.filter(c => currentPicks[c.id]?.will_win === winners[c.id]).length;
-  const shouldWinCorrect = categoriesWithWinners.filter(c => currentPicks[c.id]?.should_win === winners[c.id]).length;
+  const willWinCorrect = categoriesWithWinners.filter(c => isPickCorrect(currentPicks[c.id]?.will_win, winners[c.id])).length;
+  const shouldWinCorrect = categoriesWithWinners.filter(c => isPickCorrect(currentPicks[c.id]?.should_win, winners[c.id])).length;
   const totalAnswered = categoriesWithWinners.length;
 
   const shareUrl = `${window.location.origin}/?compare=${user.id}`;
@@ -3124,9 +3138,9 @@ function Profile({ user, picks, show }) {
                         return (
                           <div key={cat.id} className="result-row">
                             <span className="result-cat">{cat.name}</span>
-                            <span className="result-winner">{actual}</span>
-                            <span className={`result-badge ${myW === actual ? "correct" : "wrong"}`}>{myW === actual ? "★✓" : "★✗"}</span>
-                            <span className={`result-badge ${myS === actual ? "correct" : "wrong"}`}>{myS === actual ? "♥✓" : "♥✗"}</span>
+                            <span className="result-winner">{formatWinner(actual)}</span>
+                            <span className={`result-badge ${isPickCorrect(myW, actual) ? "correct" : "wrong"}`}>{isPickCorrect(myW, actual) ? "★✓" : "★✗"}</span>
+                            <span className={`result-badge ${isPickCorrect(myS, actual) ? "correct" : "wrong"}`}>{isPickCorrect(myS, actual) ? "♥✓" : "♥✗"}</span>
                           </div>
                         );
                       })}
@@ -3578,8 +3592,13 @@ function AdminPanel({ onBack }) {
     setSaving(true);
     setSaveMsg("");
     const rows = Object.entries(winners)
-      .filter(([, v]) => v)
-      .map(([category_id, will_win_winner]) => ({ show_id: selectedShow.id, category_id, will_win_winner }));
+      .map(([category_id, raw]) => {
+        // Strip trailing pipe from incomplete tie entries (e.g. "Film A|" → "Film A")
+        const will_win_winner = raw.replace(/\|+$/, "").trim();
+        return { category_id, will_win_winner };
+      })
+      .filter(({ will_win_winner }) => will_win_winner)
+      .map(({ category_id, will_win_winner }) => ({ show_id: selectedShow.id, category_id, will_win_winner }));
     if (rows.length > 0) {
       // Delete then re-insert to avoid relying on a unique constraint for upsert
       const { error: delError } = await supabase.from("winners").delete().eq("show_id", selectedShow.id);
@@ -3649,17 +3668,58 @@ function AdminPanel({ onBack }) {
                   </button>
                 </div>
               </div>
-              <p className="admin-hint">Select the winner from the dropdown for each category. Click "Save All Winners" when done.</p>
+              <p className="admin-hint">Select the winner for each category. Use "+ Tie" to add a second winner if there was a tie. Click "Save All Winners" when done.</p>
               <div className="admin-winners-grid">
-                {selectedShow.categories.map(cat => (
-                  <div key={cat.id} className="admin-winner-row">
-                    <label className="admin-cat-label">{cat.name}</label>
-                    <select className="admin-select" value={winners[cat.id] || ""} onChange={e => handleWinnerChange(cat.id, e.target.value)}>
-                      <option value="">— Not yet announced —</option>
-                      {cat.nominees.map(nom => <option key={nom} value={nom}>{nom}</option>)}
-                    </select>
-                  </div>
-                ))}
+                {selectedShow.categories.map(cat => {
+                  const raw = winners[cat.id] || "";
+                  const parts = raw.split("|").filter(Boolean);
+                  const first = parts[0] || "";
+                  const second = parts[1] || "";
+                  const hasTie = !!second;
+                  return (
+                    <div key={cat.id} className="admin-winner-row">
+                      <label className="admin-cat-label">
+                        {cat.name}
+                        {hasTie && <span className="admin-tie-badge">TIE</span>}
+                      </label>
+                      <div className="admin-winner-selects">
+                        <select
+                          className="admin-select"
+                          value={first}
+                          onChange={e => {
+                            const v = e.target.value;
+                            handleWinnerChange(cat.id, second ? v + "|" + second : v);
+                          }}
+                        >
+                          <option value="">— Not yet announced —</option>
+                          {cat.nominees.map(nom => <option key={nom} value={nom}>{nom}</option>)}
+                        </select>
+                        {hasTie ? (
+                          <div className="admin-tie-row">
+                            <select
+                              className="admin-select admin-select--tie"
+                              value={second}
+                              onChange={e => {
+                                const v = e.target.value;
+                                handleWinnerChange(cat.id, v ? first + "|" + v : first);
+                              }}
+                            >
+                              <option value="">— Remove tie —</option>
+                              {cat.nominees.filter(n => n !== first).map(nom => <option key={nom} value={nom}>{nom}</option>)}
+                            </select>
+                          </div>
+                        ) : (
+                          first && (
+                            <button
+                              className="admin-add-tie-btn"
+                              onClick={() => handleWinnerChange(cat.id, first + "|")}
+                            >+ Tie</button>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </>
@@ -3808,8 +3868,8 @@ function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, on
     const shouldPicked= show.categories.filter(c => showPicks[c.id]?.should_win).length;
     const bothPicked  = show.categories.filter(c => showPicks[c.id]?.will_win && showPicks[c.id]?.should_win).length;
     const withWinners = show.categories.filter(c => showWinners[c.id]);
-    const willCorrect = withWinners.filter(c => showPicks[c.id]?.will_win === showWinners[c.id]).length;
-    const shouldCorrect=withWinners.filter(c => showPicks[c.id]?.should_win=== showWinners[c.id]).length;
+    const willCorrect = withWinners.filter(c => isPickCorrect(showPicks[c.id]?.will_win, showWinners[c.id])).length;
+    const shouldCorrect=withWinners.filter(c => isPickCorrect(showPicks[c.id]?.should_win, showWinners[c.id])).length;
     return { show, total, willPicked, shouldPicked, bothPicked, willCorrect, shouldCorrect, graded: withWinners.length };
   }).filter(s => s.bothPicked > 0);
 

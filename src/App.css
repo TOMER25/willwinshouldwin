@@ -610,6 +610,24 @@ body {
 }
 .admin-select:focus { border-color: var(--gold); }
 
+.admin-winner-selects { display: flex; flex-direction: column; gap: 0.4rem; flex: 1; }
+.admin-tie-row { display: flex; gap: 0.5rem; align-items: center; }
+.admin-select--tie { border-color: rgba(201,168,76,0.4); }
+.admin-tie-badge {
+  display: inline-block; margin-left: 0.5rem;
+  font-size: 0.6rem; font-family: 'DM Mono', monospace; letter-spacing: 0.08em;
+  background: rgba(201,168,76,0.15); color: var(--gold);
+  border: 1px solid rgba(201,168,76,0.3); border-radius: 4px; padding: 1px 5px;
+  vertical-align: middle;
+}
+.admin-add-tie-btn {
+  align-self: flex-start; background: transparent;
+  border: 1px dashed rgba(201,168,76,0.4); border-radius: 5px;
+  color: var(--gold); font-family: 'DM Mono', monospace; font-size: 0.7rem;
+  padding: 0.3rem 0.7rem; cursor: pointer; transition: background 0.15s;
+}
+.admin-add-tie-btn:hover { background: rgba(201,168,76,0.08); }
+
 /* ============================================================
    FOOTER
    ============================================================ */
@@ -633,9 +651,9 @@ body {
   .progress-bar-wrap { padding: 0.6rem 1.5rem; }
   .shows-grid { grid-template-columns: repeat(2, 1fr); }
   .home-content { padding: 2.5rem 1.5rem; }
-  .admin-winner-row { flex-direction: row; align-items: center; }
-  .admin-cat-label { width: 200px; flex-shrink: 0; }
-  .admin-select { flex: 1; }
+  .admin-winner-row { flex-direction: row; align-items: flex-start; }
+  .admin-cat-label { width: 200px; flex-shrink: 0; margin-top: 0.4rem; }
+  .admin-winner-selects { flex: 1; }
 }
 
 /* ============================================================
