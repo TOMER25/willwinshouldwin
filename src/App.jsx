@@ -93,7 +93,7 @@ const GLOSSARY = [
     items: [
       { term: "★ Will Win", def: "Your prediction for who will actually receive the award. This is your forecasting pick — who has the momentum, the campaign, the narrative. Being correct here scores you a point on the leaderboard." },
       { term: "♥ Should Win", def: "Your personal artistic judgment — who you believe deserves the award regardless of what happens on the night. This is your taste on record. After the ceremony, we track how often your Should Win matched the actual winner." },
-      { term: "Leaderboard", def: "Scored separately for ★ and ♥ accuracy. Will Win correct picks reward forecasting skill; Should Win matches reward taste that aligned with the voters — a rarer and more interesting distinction." },
+      { term: "Leaderboard", def: "Scored on ★ Will Win accuracy only. Every correct Will Win pick earns you a point. ♥ Should Win is tracked separately as a measure of taste — shown on your profile but not counted toward your leaderboard total." },
     ],
   },
   {
@@ -1068,7 +1068,7 @@ function Leaderboard({ currentUserId, show }) {
       return {
         uid, name: prof.username || "Anonymous", username: prof.username,
         accent_color: prof.accent_color, color: theme.will,
-        ...scores, total: scores.will_win + scores.should_win,
+        ...scores, total: scores.will_win,
         isYou: uid === currentUserId,
         sparkData, catMap: userCatMap[uid] || {},
       };
@@ -1161,7 +1161,7 @@ function Leaderboard({ currentUserId, show }) {
           {/* Bar chart — only when results are available */}
           {winnersAnnounced && displayed.length > 0 && (
             <div className="lb-chart-card">
-              <p className="lb-chart-label">Top scores — ★ Will Win + ♥ Should Win</p>
+              <p className="lb-chart-label">Top scores — ★ Will Win (total) + ♥ Should Win (taste)</p>
               <LbBarChart data={barData} />
             </div>
           )}
@@ -1703,7 +1703,7 @@ function Leagues({ currentUserId, show, allProfiles, pendingLeagueCode = null, o
     const willCorrect = Object.entries(leagueWinners).filter(([catId, winner]) => picks[catId]?.will_win === winner).length;
     const shouldCorrect = Object.entries(leagueWinners).filter(([catId, winner]) => picks[catId]?.should_win === winner).length;
     const bothPicked = show.categories.filter(c => picks[c.id]?.will_win && picks[c.id]?.should_win).length;
-    return { ...member, willCorrect, shouldCorrect, total: willCorrect + shouldCorrect, bothPicked };
+    return { ...member, willCorrect, shouldCorrect, total: willCorrect, bothPicked };
   }).sort((a, b) => b.total - a.total || b.willCorrect - a.willCorrect);
 
   if (loading) return <div className="loading">Loading leagues…</div>;
@@ -2425,6 +2425,7 @@ function Profile({ user, picks, show }) {
   const [followers, setFollowers] = useState([]);   // [{ id, username, display_name, accent_color }]
   const [colBallotsOpen, setColBallotsOpen] = useState(false);
   const [colFriendsOpen, setColFriendsOpen] = useState(false);
+  const [resultsOpen, setResultsOpen] = useState({});
   const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "Friend";
 
   const memberSince = user.created_at
@@ -2626,8 +2627,8 @@ function Profile({ user, picks, show }) {
   // Best show: highest combined correct picks (min 1 graded)
   const bestShow = gradedShows.reduce((best, s) => {
     if (!best) return s;
-    const sPct = (s.willCorrect + s.shouldCorrect) / (s.graded * 2);
-    const bPct = (best.willCorrect + best.shouldCorrect) / (best.graded * 2);
+    const sPct = s.willCorrect / s.graded;
+    const bPct = best.willCorrect / best.graded;
     return sPct > bPct ? s : best;
   }, null);
 
@@ -2879,6 +2880,33 @@ function Profile({ user, picks, show }) {
 
         </div> {/* end profile-columns */}
 
+        {/* ── Username card (standalone, prominent) ── */}
+        <div className="profile-username-card">
+          <p className="profile-username-card-label">Your profile name</p>
+          <p className="username-hint">Sets your shareable URL: willwinshouldwin.com/?u=<strong>{username || "yourname"}</strong></p>
+          <div className="username-row">
+            <input
+              className="auth-input username-input"
+              placeholder="yourname"
+              value={usernameDraft}
+              onChange={e => { setUsernameDraft(e.target.value); setUsernameError(""); }}
+              onKeyDown={e => e.key === "Enter" && saveUsername()}
+              maxLength={30}
+            />
+            <button className="auth-submit username-save-btn" onClick={saveUsername} disabled={savingUsername}>
+              {savingUsername ? "…" : usernameSaved ? "✓ Saved" : "Save"}
+            </button>
+          </div>
+          {usernameError && <p className="auth-error" style={{ marginTop: "0.4rem" }}>{usernameError}</p>}
+          {username && (
+            <p className="username-link-row">
+              <a className="username-view-link" href={`/?u=${username}`} target="_blank" rel="noreferrer">
+                View your public profile ↗
+              </a>
+            </p>
+          )}
+        </div>
+
         {/* ── Customization (collapsible) ── */}
         <div className="profile-customization">
           <button className="customize-toggle" onClick={() => setCustomizeOpen(o => !o)}>
@@ -2889,32 +2917,6 @@ function Profile({ user, picks, show }) {
           {customizeOpen && (
             <div className="customize-body">
 
-              {/* Public username */}
-              <div className="username-section">
-                <p className="theme-label">Public username</p>
-                <p className="username-hint">Sets your shareable profile URL: willwinshouldwin.com/?u=<strong>{username || "yourname"}</strong></p>
-                <div className="username-row">
-                  <input
-                    className="auth-input username-input"
-                    placeholder="yourname"
-                    value={usernameDraft}
-                    onChange={e => { setUsernameDraft(e.target.value); setUsernameError(""); }}
-                    onKeyDown={e => e.key === "Enter" && saveUsername()}
-                    maxLength={30}
-                  />
-                  <button className="auth-submit username-save-btn" onClick={saveUsername} disabled={savingUsername}>
-                    {savingUsername ? "…" : usernameSaved ? "✓ Saved" : "Save"}
-                  </button>
-                </div>
-                {usernameError && <p className="auth-error" style={{ marginTop: "0.4rem" }}>{usernameError}</p>}
-                {username && (
-                  <p className="username-link-row">
-                    <a className="username-view-link" href={`/?u=${username}`} target="_blank" rel="noreferrer">
-                      View your public profile ↗
-                    </a>
-                  </p>
-                )}
-              </div>
               {/* Picks visibility */}
               <div className="username-section">
                 <p className="theme-label">Who can see your picks</p>
@@ -3091,18 +3093,45 @@ function Profile({ user, picks, show }) {
         </div>
 
         {/* ── Results after ceremony ── */}
-        {winnersAnnounced && (
+        {gradedShows.length > 0 && (
           <div className="profile-picks-summary">
             <h3 className="profile-section-title">Your Results</h3>
-            {categories.filter(c => winners[c.id]).map(cat => {
-              const myW = currentPicks[cat.id]?.will_win, myS = currentPicks[cat.id]?.should_win;
-              const actual = winners[cat.id];
+            {gradedShows.map(({ show: s, willCorrect, shouldCorrect, graded }) => {
+              const isOpen = !!resultsOpen[s.id];
+              const showPicks = allPicksByShow[s.id] || {};
+              const showWinners = s.id === show.id ? winners : {};
+              const theme = COLOR_THEMES.find(t => t.id === (profileData.accent_color || "gold")) || COLOR_THEMES[0];
               return (
-                <div key={cat.id} className="result-row">
-                  <span className="result-cat">{cat.name}</span>
-                  <span className="result-winner">{actual}</span>
-                  <span className={`result-badge ${myW === actual ? "correct" : "wrong"}`}>{myW === actual ? "★✓" : "★✗"}</span>
-                  <span className={`result-badge ${myS === actual ? "correct" : "wrong"}`}>{myS === actual ? "♥✓" : "♥✗"}</span>
+                <div key={s.id} className="results-accordion-item">
+                  <button
+                    className="results-accordion-header"
+                    onClick={() => setResultsOpen(o => ({ ...o, [s.id]: !o[s.id] }))}
+                  >
+                    <span className="results-acc-name">{s.shortName || s.name}</span>
+                    <span className="results-acc-scores">
+                      <span style={{ color: theme.will }}>★ {willCorrect}/{graded}</span>
+                      <span className="results-acc-sep">·</span>
+                      <span style={{ color: theme.should }}>♥ {shouldCorrect}/{graded}</span>
+                    </span>
+                    <span className="results-acc-chevron">{isOpen ? "−" : "+"}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="results-accordion-body">
+                      {s.categories.filter(c => showWinners[c.id]).map(cat => {
+                        const myW = showPicks[cat.id]?.will_win;
+                        const myS = showPicks[cat.id]?.should_win;
+                        const actual = showWinners[cat.id];
+                        return (
+                          <div key={cat.id} className="result-row">
+                            <span className="result-cat">{cat.name}</span>
+                            <span className="result-winner">{actual}</span>
+                            <span className={`result-badge ${myW === actual ? "correct" : "wrong"}`}>{myW === actual ? "★✓" : "★✗"}</span>
+                            <span className={`result-badge ${myS === actual ? "correct" : "wrong"}`}>{myS === actual ? "♥✓" : "♥✗"}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -3793,8 +3822,8 @@ function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, on
   const pubOverallShouldPct = pubTotalGraded > 0 ? Math.round((pubTotalShouldCorrect / pubTotalGraded) * 100) : null;
   const pubBestShow = pubGradedShows.reduce((best, s) => {
     if (!best) return s;
-    const sPct = (s.willCorrect + s.shouldCorrect) / (s.graded * 2);
-    const bPct = (best.willCorrect + best.shouldCorrect) / (best.graded * 2);
+    const sPct = s.willCorrect / s.graded;
+    const bPct = best.willCorrect / best.graded;
     return sPct > bPct ? s : best;
   }, null);
   const favCats = profileData?.favorite_categories || [];

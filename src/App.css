@@ -523,6 +523,36 @@ body {
 .result-badge.correct { background: rgba(90,160,120,0.2); color: #5da; }
 .result-badge.wrong { background: rgba(100,100,120,0.15); color: var(--text-muted); }
 
+/* Results accordion */
+.results-accordion-item { border-bottom: 1px solid var(--border); }
+.results-accordion-item:last-child { border-bottom: none; }
+.results-accordion-header {
+  width: 100%; display: flex; align-items: center; gap: 0.6rem;
+  background: transparent; border: none; padding: 0.65rem 0.1rem;
+  cursor: pointer; text-align: left; -webkit-tap-highlight-color: transparent;
+}
+.results-acc-name { font-size: 0.78rem; font-weight: 600; color: var(--text); flex: 1; font-family: 'Playfair Display', serif; }
+.results-acc-scores { display: flex; gap: 0.4rem; align-items: center; font-size: 0.7rem; font-family: 'DM Mono', monospace; }
+.results-acc-sep { color: var(--text-muted); }
+.results-acc-chevron { font-size: 0.9rem; color: var(--text-muted); margin-left: 0.2rem; }
+.results-accordion-body { padding-bottom: 0.4rem; }
+
+/* Standalone username card */
+.profile-username-card {
+  background: var(--surface);
+  border: 1px solid var(--gold-dim, rgba(201,168,76,0.25));
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+}
+.profile-username-card-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 0 0 0.3rem;
+}
+
 /* ============================================================
    GLOSSARY
    ============================================================ */
