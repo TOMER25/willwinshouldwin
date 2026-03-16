@@ -3398,9 +3398,8 @@ function ManageShows({ dbShows, onRefresh }) {
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${session.access_token}`,
-            "apikey": SUPABASE_ANON_KEY,
           },
-          body: JSON.stringify({ show_id: showId }),
+          body: JSON.stringify({ show_id: showId, secret: import.meta.env.VITE_FUNCTION_SECRET }),
         }
       );
       const result = await res.json();
