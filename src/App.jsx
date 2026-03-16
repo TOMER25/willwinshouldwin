@@ -1253,14 +1253,17 @@ function Leaderboard({ currentUserId, show }) {
               </div>
               {/* Mini final-standings recap */}
               <div className="lb-race-recap">
-                {racePlayers.map((p, i) => (
+                {racePlayers.map((p, i) => {
+                  const lineColor = RACE_COLORS[i % RACE_COLORS.length];
+                  return (
                   <div key={p.uid} className={`lb-race-row${p.isYou ? " lb-you-race" : ""}`}>
                     <span className="lb-race-rank">#{i + 1}</span>
-                    <span className="lb-race-dot" style={{ background: p.color }} />
+                    <span className="lb-race-dot" style={{ background: lineColor }} />
                     <span className="lb-race-name">{p.name}{p.isYou ? " (you)" : ""}</span>
-                    <span className="lb-race-score" style={{ color: p.color }}>{p.total}</span>
+                    <span className="lb-race-score" style={{ color: lineColor }}>{p.total}</span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}
@@ -1332,6 +1335,8 @@ function LbBarChart({ data }) {
   );
 }
 
+const RACE_COLORS = ["#c9a84c", "#c94c5e", "#4cb8c9", "#a084e8"];
+
 function LbLineChart({ data, players }) {
   return (
     <ResponsiveContainer width="100%" height={240}>
@@ -1345,12 +1350,15 @@ function LbLineChart({ data, players }) {
           fontFamily: "'DM Mono', monospace", fontSize: 9,
           letterSpacing: 1, paddingTop: 12, color: "var(--text-muted)"
         }} />
-        {players.map(p => (
-          <Line key={p.uid} type="monotone" dataKey={p.name}
-            stroke={p.color} strokeWidth={p.isYou ? 2.5 : 1.5}
-            dot={{ r: 2.5, fill: p.color, strokeWidth: 0 }}
-            activeDot={{ r: 5 }} />
-        ))}
+        {players.map((p, i) => {
+          const lineColor = RACE_COLORS[i % RACE_COLORS.length];
+          return (
+            <Line key={p.uid} type="monotone" dataKey={p.name}
+              stroke={lineColor} strokeWidth={p.isYou ? 2.5 : 1.5}
+              dot={{ r: 2.5, fill: lineColor, strokeWidth: 0 }}
+              activeDot={{ r: 5 }} />
+          );
+        })}
       </LineChart>
     </ResponsiveContainer>
   );
