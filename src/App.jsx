@@ -3620,6 +3620,14 @@ function HistoryScreen({ user, onGoHome }) {
   const [histStats, setHistStats]       = useState(null);
   const [pickedCeremonies, setPickedCeremonies] = useState(new Set());
 
+  // Compare state
+  const [compareMode, setCompareMode]       = useState(false);
+  const [compareInput, setCompareInput]     = useState("");
+  const [compareUser, setCompareUser]       = useState(null); // { id, username }
+  const [comparePicks, setComparePicks]     = useState({});  // { category: nominee_index }
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareError, setCompareError]     = useState("");
+
   useEffect(() => { loadHistStats(); }, []);
 
   const loadHistStats = async () => {
@@ -3693,6 +3701,62 @@ function HistoryScreen({ user, onGoHome }) {
   const revealWinner = (category) => {
     if (wonGuesses[category] === undefined) return;
     setRevealed(prev => ({ ...prev, [category]: true }));
+  };
+
+  const openCompare = () => {
+    setCompareMode(true);
+    setCompareInput("");
+    setCompareUser(null);
+    setComparePicks({});
+    setCompareError("");
+  };
+
+  const closeCompare = () => {
+    setCompareMode(false);
+    setCompareInput("");
+    setCompareUser(null);
+    setComparePicks({});
+    setCompareError("");
+  };
+
+  const loadCompareUser = async () => {
+    if (!compareInput.trim()) return;
+    setCompareLoading(true);
+    setCompareError("");
+    setCompareUser(null);
+    setComparePicks({});
+
+    // Resolve username → user id
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("id, username")
+      .ilike("username", compareInput.trim())
+      .single();
+
+    if (!prof) {
+      setCompareError("User not found.");
+      setCompareLoading(false);
+      return;
+    }
+    if (prof.id === user.id) {
+      setCompareError("That's you!");
+      setCompareLoading(false);
+      return;
+    }
+
+    // Load their picks for this ceremony
+    const { data: pickData } = await supabase
+      .from("historical_picks")
+      .select("category, nominee_index")
+      .eq("user_id", prof.id)
+      .eq("ceremony", selected);
+
+    const pm = {};
+    (pickData || []).forEach(p => { pm[p.category] = p.nominee_index; });
+
+    setCompareUser({ id: prof.id, username: prof.username });
+    setComparePicks(pm);
+    setCompareLoading(false);
   };
 
   const CATEGORY_ORDER = [
@@ -3783,29 +3847,75 @@ function HistoryScreen({ user, onGoHome }) {
               <p className="history-legend-item"><span className="history-legend-won">★ Won</span> — guess who won, then reveal</p>
               <p className="history-legend-item"><span className="history-legend-should">♥ Should Win</span> — your pick, saved to profile</p>
             </div>
+            {/* Compare toggle */}
+            {!compareMode ? (
+              <button className="history-compare-open-btn" onClick={openCompare}>Compare with a friend →</button>
+            ) : (
+              <div className="history-compare-panel">
+                <div className="history-compare-input-row">
+                  <input
+                    className="auth-input history-compare-input"
+                    placeholder="Username"
+                    value={compareInput}
+                    onChange={e => { setCompareInput(e.target.value); setCompareError(""); }}
+                    onKeyDown={e => e.key === "Enter" && loadCompareUser()}
+                  />
+                  <button className="copy-link-btn" onClick={loadCompareUser} disabled={compareLoading}>
+                    {compareLoading ? "…" : "Compare"}
+                  </button>
+                  <button className="back-btn" onClick={closeCompare}>✕</button>
+                </div>
+                {compareError && <p className="history-compare-error">{compareError}</p>}
+                {compareUser && (() => {
+                  const cats = CATEGORY_ORDER.filter(cat => byCategory[cat]);
+                  const agreed = cats.filter(cat => {
+                    const mine = shouldPicks[cat];
+                    const theirs = comparePicks[cat];
+                    return mine !== undefined && theirs !== undefined && mine === theirs;
+                  }).length;
+                  const bothPicked = cats.filter(cat => shouldPicks[cat] !== undefined && comparePicks[cat] !== undefined).length;
+                  return (
+                    <p className="history-compare-summary">
+                      Comparing with <strong>{compareUser.username}</strong>
+                      {bothPicked > 0 && <> · agreed on <span style={{ color: "var(--gold)" }}>{agreed}/{bothPicked}</span> categories</>}
+                    </p>
+                  );
+                })()}
+              </div>
+            )}
           </div>
           <div className="picks-grid">
             {CATEGORY_ORDER.filter(cat => byCategory[cat]).map(cat => {
               const catNominees = byCategory[cat];
               const myShould = shouldPicks[cat];
+              const theirShould = compareUser ? comparePicks[cat] : undefined;
               const myGuess = wonGuesses[cat];
               const isRevealed = !!revealed[cat];
               const actualWinner = catNominees.find(n => n.winner);
               const catCounts = pickCounts[cat] || {};
               const totalCatPicks = Object.values(catCounts).reduce((a, b) => a + b, 0);
               const guessCorrect = isRevealed && myGuess === actualWinner?.nominee_index;
+              const inAgreement = compareUser && myShould !== undefined && theirShould !== undefined && myShould === theirShould;
+              const bothHavePick = compareUser && myShould !== undefined && theirShould !== undefined;
               return (
-                <div key={cat} className="category-card">
-                  <h3 className="category-name">{cat}</h3>
+                <div key={cat} className={`category-card ${inAgreement ? "category-card--agreed" : bothHavePick ? "category-card--disagreed" : ""}`}>
+                  <h3 className="category-name">
+                    {cat}
+                    {inAgreement && <span className="hist-agree-badge">✓ Agreed</span>}
+                  </h3>
                   <div className="pick-headers">
                     <span className="pick-label will-label">Won ★</span>
-                    <span className="pick-label should-label">Should Win ♥</span>
+                    <span className="pick-label should-label">
+                      {compareUser ? `You ♥` : "Should Win ♥"}
+                    </span>
+                    {compareUser && <span className="pick-label hist-compare-label">{compareUser.username} ♥</span>}
                   </div>
                   <div className="nominees-list">
                     {catNominees.map(nom => {
                       const isActualWinner = nom.winner;
                       const isGuessed = myGuess === nom.nominee_index;
                       const isShouldPick = myShould === nom.nominee_index;
+                      const isTheirPick = theirShould === nom.nominee_index;
                       const pct = totalCatPicks > 0
                         ? Math.round(((catCounts[nom.nominee_index] || 0) / totalCatPicks) * 100) : 0;
                       let wonBtnClass = "pick-btn will-btn";
@@ -3839,6 +3949,11 @@ function HistoryScreen({ user, onGoHome }) {
                               onClick={() => handleShouldPick(cat, nom.nominee_index)}>
                               {isShouldPick ? "♥" : "♡"}
                             </button>
+                            {compareUser && (
+                              <span className={`pick-btn hist-compare-pick ${isTheirPick ? "selected" : ""}`}>
+                                {isTheirPick ? "♥" : ""}
+                              </span>
+                            )}
                           </div>
                         </div>
                       );

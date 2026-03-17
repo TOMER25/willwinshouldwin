@@ -2636,3 +2636,68 @@ body {
   background: var(--crimson); flex-shrink: 0;
   margin-top: 2px;
 }
+
+/* ============================================================
+   HISTORY — Compare feature
+   ============================================================ */
+.history-compare-open-btn {
+  align-self: flex-end;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-dim); border-radius: var(--radius);
+  padding: 0.45rem 0.85rem; font-family: 'DM Mono', monospace;
+  font-size: 0.75rem; letter-spacing: 0.06em;
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+.history-compare-open-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+.history-compare-panel {
+  display: flex; flex-direction: column; gap: 0.5rem;
+  min-width: 240px;
+}
+.history-compare-input-row {
+  display: flex; gap: 0.4rem; align-items: center;
+}
+.history-compare-input {
+  flex: 1; padding: 0.55rem 0.75rem !important;
+  font-size: 0.82rem !important;
+}
+.history-compare-error {
+  font-size: 0.75rem; color: var(--crimson); letter-spacing: 0.04em;
+}
+.history-compare-summary {
+  font-size: 0.75rem; color: var(--text-dim); letter-spacing: 0.03em;
+}
+
+/* Category card states when comparing */
+.category-card--agreed {
+  border-color: rgba(201,168,76,0.35);
+  background: linear-gradient(160deg, rgba(201,168,76,0.06) 0%, var(--surface) 60%);
+}
+.category-card--disagreed {
+  border-color: rgba(201,76,94,0.25);
+}
+.hist-agree-badge {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem; font-weight: 400;
+  color: var(--gold); letter-spacing: 0.08em;
+  margin-left: 0.6rem; vertical-align: middle;
+  opacity: 0.85;
+}
+
+/* Their pick column */
+.hist-compare-label {
+  color: var(--text-dim) !important;
+  font-size: 0.68rem !important;
+}
+.hist-compare-pick {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 6px;
+  border: 1px dashed var(--border);
+  font-size: 0.9rem; color: var(--text-muted);
+  flex-shrink: 0;
+}
+.hist-compare-pick.selected {
+  color: var(--crimson); border-color: var(--crimson);
+  background: var(--crimson-dim);
+}
