@@ -3477,6 +3477,7 @@ function HistoricalPicksSection({ userId }) {
   const [loading, setLoading]       = useState(true);
   const [nominees, setNominees]     = useState({});
   const [openCeremonies, setOpenCeremonies] = useState({});
+  const [isOpen, setIsOpen]         = useState(false);
 
   useEffect(() => { loadPicks(); }, [userId]);
 
@@ -3514,10 +3515,12 @@ function HistoricalPicksSection({ userId }) {
 
   return (
     <div className="profile-hist-section">
-      <div className="profile-hist-header">
+      <button className="col-toggle" onClick={() => setIsOpen(o => !o)}>
         <span className="col-toggle-label">Historical Picks</span>
         <span className="col-toggle-meta">{totalPicks} pick{totalPicks !== 1 ? "s" : ""} · {ceremonyNums.length} ceremon{ceremonyNums.length !== 1 ? "ies" : "y"}</span>
-      </div>
+        <span className="col-toggle-chevron">{isOpen ? "−" : "+"}</span>
+      </button>
+      {isOpen && (<>
       {alignmentPct !== null && (
         <div className="hist-stats-strip">
           <div className="hist-stat">
@@ -3537,7 +3540,7 @@ function HistoricalPicksSection({ userId }) {
       <div className="hist-picks-list">
         {ceremonyNums.map(num => {
           const catPicks = byCeremony[num];
-          const isOpen = !!openCeremonies[num];
+          const isCeremonyOpen = !!openCeremonies[num];
           const ceremonyMatches = catPicks.filter(p => nominees[`${p.ceremony}-${p.category}-${p.nominee_index}`]?.winner).length;
           return (
             <div key={num} className="hist-picks-ceremony">
@@ -3547,9 +3550,9 @@ function HistoricalPicksSection({ userId }) {
                   {catPicks.length} pick{catPicks.length !== 1 ? "s" : ""}
                   {ceremonyMatches > 0 && <span className="hist-ceremony-matches"> · {ceremonyMatches} matched ✓</span>}
                 </span>
-                <span className="col-toggle-chevron">{isOpen ? "−" : "+"}</span>
+                <span className="col-toggle-chevron">{isCeremonyOpen ? "−" : "+"}</span>
               </button>
-              {isOpen && (
+              {isCeremonyOpen && (
                 <div className="hist-picks-body">
                   {catPicks.map(p => {
                     const nom = nominees[`${p.ceremony}-${p.category}-${p.nominee_index}`];
@@ -3569,6 +3572,7 @@ function HistoricalPicksSection({ userId }) {
           );
         })}
       </div>
+      </>)}
     </div>
   );
 }
@@ -4864,6 +4868,9 @@ function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, on
               );
             })
           )}
+
+          {/* Historical Picks */}
+          <HistoricalPicksSection userId={targetUserId} />
 
           {/* CTA for visitors not logged in */}
           {!currentUser && (
