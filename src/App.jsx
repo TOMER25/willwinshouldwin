@@ -522,7 +522,7 @@ function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin, onGoHistory, a
           </div>
         </div>
 
-        {/* Oscars History — separate section with proper spacing */}
+        {/* Oscars History */}
         <div className="shows-section shows-section--history">
           <h2 className="shows-heading">Oscars History</h2>
           <div className="shows-grid">
@@ -3456,8 +3456,10 @@ function Profile({ user, picks, show }) {
             })}
           </div>
         )}
+
         {/* ── Historical Picks ── */}
         <HistoricalPicksSection userId={user.id} />
+
       </div>
     </div>
   );
@@ -3467,10 +3469,10 @@ function Profile({ user, picks, show }) {
 // HISTORICAL PICKS SECTION (used in Profile)
 // ============================================================
 function HistoricalPicksSection({ userId }) {
-  const [picks, setPicks]     = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [isOpen, setIsOpen]   = useState(false);
+  const [picks, setPicks]       = useState([]);
+  const [loading, setLoading]   = useState(true);
   const [nominees, setNominees] = useState({});
+  const [openCeremonies, setOpenCeremonies] = useState({}); // accordion state per ceremony
 
   useEffect(() => { loadPicks(); }, [userId]);
 
@@ -3483,11 +3485,12 @@ function HistoricalPicksSection({ userId }) {
     if (!data || data.length === 0) { setLoading(false); return; }
     setPicks(data);
 
-    // Batch-fetch the nominee names
+    // Fetch nominee names for all picks in one query
+    const ceremonies = [...new Set(data.map(p => p.ceremony))];
     const { data: nomData } = await supabase
       .from("historical_ceremonies")
       .select("ceremony, category, nominee_index, name, film, winner")
-      .in("ceremony", [...new Set(data.map(p => p.ceremony))]);
+      .in("ceremony", ceremonies);
 
     const nm = {};
     (nomData || []).forEach(n => { nm[`${n.ceremony}-${n.category}-${n.nominee_index}`] = n; });
@@ -3497,6 +3500,7 @@ function HistoricalPicksSection({ userId }) {
 
   if (loading || picks.length === 0) return null;
 
+  // Group by ceremony
   const byCeremony = {};
   for (const p of picks) {
     if (!byCeremony[p.ceremony]) byCeremony[p.ceremony] = [];
@@ -3505,84 +3509,149 @@ function HistoricalPicksSection({ userId }) {
   const ceremonyNums = Object.keys(byCeremony).map(Number).sort((a, b) => b - a);
   const ordinal = n => `${n}${[,"st","nd","rd"][n % 10] || "th"}`;
 
+  // Stats
+  const totalPicks = picks.length;
+  const matchedWinner = picks.filter(p => nominees[`${p.ceremony}-${p.category}-${p.nominee_index}`]?.winner).length;
+  const alignmentPct = totalPicks > 0 ? Math.round((matchedWinner / totalPicks) * 100) : null;
+
+  const toggleCeremony = (num) => setOpenCeremonies(o => ({ ...o, [num]: !o[num] }));
+
   return (
     <div className="profile-hist-section">
-      <button className="col-toggle" onClick={() => setIsOpen(o => !o)}>
+      <div className="profile-hist-header">
         <span className="col-toggle-label">Historical Picks</span>
-        <span className="col-toggle-meta">{picks.length} pick{picks.length !== 1 ? "s" : ""} across {ceremonyNums.length} ceremon{ceremonyNums.length !== 1 ? "ies" : "y"}</span>
-        <span className="col-toggle-chevron">{isOpen ? "−" : "+"}</span>
-      </button>
-      {isOpen && (
-        <div className="hist-picks-list">
-          {ceremonyNums.map(num => {
-            const catPicks = byCeremony[num];
-            return (
-              <div key={num} className="hist-picks-ceremony">
-                <p className="hist-picks-ceremony-label">{ordinal(num)} Academy Awards</p>
-                {catPicks.map(p => {
-                  const nom = nominees[`${p.ceremony}-${p.category}-${p.nominee_index}`];
-                  if (!nom) return null;
-                  const displayFilm = nom.film?.includes("|") ? nom.film.split("|")[0] + "…" : nom.film;
-                  const label = nom.name !== nom.film && nom.name ? `${nom.name} — ${displayFilm}` : displayFilm;
-                  return (
-                    <div key={p.category} className="hist-pick-row">
-                      <span className="hist-pick-cat">{p.category}</span>
-                      <span className="hist-pick-name">
-                        ♥ {label}
-                        {nom.winner && <span className="hist-pick-match"> · matched winner ✓</span>}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
+        <span className="col-toggle-meta">{totalPicks} pick{totalPicks !== 1 ? "s" : ""} · {ceremonyNums.length} ceremon{ceremonyNums.length !== 1 ? "ies" : "y"}</span>
+      </div>
+
+      {/* Stats strip */}
+      {alignmentPct !== null && (
+        <div className="hist-stats-strip">
+          <div className="hist-stat">
+            <span className="hist-stat-num">{totalPicks}</span>
+            <span className="hist-stat-label">Picks logged</span>
+          </div>
+          <div className="hist-stat">
+            <span className="hist-stat-num" style={{ color: "var(--crimson)" }}>{ceremonyNums.length}</span>
+            <span className="hist-stat-label">Ceremonies</span>
+          </div>
+          <div className="hist-stat">
+            <span className="hist-stat-num" style={{ color: "var(--gold)" }}>{alignmentPct}%</span>
+            <span className="hist-stat-label">Matched winner</span>
+          </div>
         </div>
       )}
+
+      {/* Accordion by ceremony */}
+      <div className="hist-picks-list">
+        {ceremonyNums.map(num => {
+          const catPicks = byCeremony[num];
+          const isOpen = !!openCeremonies[num];
+          const ceremonyMatches = catPicks.filter(p => nominees[`${p.ceremony}-${p.category}-${p.nominee_index}`]?.winner).length;
+
+          return (
+            <div key={num} className="hist-picks-ceremony">
+              <button className="hist-ceremony-toggle" onClick={() => toggleCeremony(num)}>
+                <span className="hist-ceremony-label">{ordinal(num)} Academy Awards</span>
+                <span className="hist-ceremony-meta">
+                  {catPicks.length} pick{catPicks.length !== 1 ? "s" : ""}
+                  {ceremonyMatches > 0 && <span className="hist-ceremony-matches"> · {ceremonyMatches} matched ✓</span>}
+                </span>
+                <span className="col-toggle-chevron">{isOpen ? "−" : "+"}</span>
+              </button>
+              {isOpen && (
+                <div className="hist-picks-body">
+                  {catPicks.map(p => {
+                    const nom = nominees[`${p.ceremony}-${p.category}-${p.nominee_index}`];
+                    if (!nom) return null;
+                    const displayFilm = nom.film?.includes("|") ? nom.film.split("|")[0] + "…" : nom.film;
+                    const label = nom.name !== nom.film && nom.name ? `${nom.name} — ${displayFilm}` : displayFilm;
+                    return (
+                      <div key={p.category} className="hist-pick-row">
+                        <span className="hist-pick-cat">{p.category}</span>
+                        <span className="hist-pick-name">
+                          ♥ {label}
+                          {nom.winner && <span className="hist-pick-match"> · matched winner ✓</span>}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
 // ============================================================
-// HISTORY SCREEN
+// HISTORY SCREEN — ceremony browser + ballot
 // ============================================================
+
+// Client-side ceremony list — avoids DB pagination issues entirely
+// Years sourced from the dataset; early ceremonies used split years (e.g. "1927/28")
+const CEREMONY_LIST = (() => {
+  const list = [];
+  // Ceremonies 1–96 use their historical years
+  const yearMap = {
+    1:"1927/28",2:"1929/30",3:"1930/31",4:"1931/32",5:"1932/33",
+    6:"1934",7:"1935",8:"1935/36",9:"1936/37",10:"1937/38",
+    11:"1938",12:"1939",13:"1940",14:"1941",15:"1942",
+    16:"1943",17:"1944",18:"1945",19:"1946",20:"1947",
+    21:"1948",22:"1949",23:"1950",24:"1951",25:"1952",
+    26:"1953",27:"1954",28:"1955",29:"1956",30:"1957",
+    31:"1958",32:"1959",33:"1960",34:"1961",35:"1962",
+    36:"1963",37:"1964",38:"1965",39:"1966",40:"1967",
+    41:"1968",42:"1969",43:"1970",44:"1971",45:"1972",
+    46:"1973",47:"1974",48:"1975",49:"1976",50:"1977",
+    51:"1978",52:"1979",53:"1980",54:"1981",55:"1982",
+    56:"1983",57:"1984",58:"1985",59:"1986",60:"1987",
+    61:"1988",62:"1989",63:"1990",64:"1991",65:"1992",
+    66:"1993",67:"1994",68:"1995",69:"1996",70:"1997",
+    71:"1998",72:"1999",73:"2000",74:"2001",75:"2002",
+    76:"2003",77:"2004",78:"2005",79:"2006",80:"2007",
+    81:"2008",82:"2009",83:"2010",84:"2011",85:"2012",
+    86:"2013",87:"2014",88:"2015",89:"2016",90:"2017",
+    91:"2018",92:"2019",93:"2020",94:"2021",95:"2022",
+    96:"2023",97:"2024",98:"2025",
+  };
+  for (let i = 98; i >= 1; i--) list.push({ ceremony: i, year: yearMap[i] || String(1927 + i) });
+  return list;
+})();
+
 function HistoryScreen({ user, onGoHome }) {
-  const [ceremonies, setCeremonies] = useState([]);
-  const [selected, setSelected]     = useState(null);
-  const [nominees, setNominees]     = useState([]);
-  const [shouldPicks, setShouldPicks] = useState({}); // { category: nominee_index }
-  const [wonGuesses, setWonGuesses]   = useState({}); // { category: nominee_index } — trivia guesses
-  const [revealed, setRevealed]       = useState({}); // { category: true } — whether guess was submitted
+  const [selected, setSelected]       = useState(null);
+  const [nominees, setNominees]       = useState([]);
+  const [shouldPicks, setShouldPicks] = useState({});
+  const [wonGuesses, setWonGuesses]   = useState({});
+  const [revealed, setRevealed]       = useState({});
   const [pickCounts, setPickCounts]   = useState({});
-  const [loading, setLoading]         = useState(true);
   const [saving, setSaving]           = useState(false);
   const [savedMsg, setSavedMsg]       = useState(false);
-  const [histPickCount, setHistPickCount] = useState(0);
+  const [histStats, setHistStats]     = useState(null); // { total, matched, ceremonies }
 
-  useEffect(() => { loadCeremonies(); loadHistPickCount(); }, []);
+  useEffect(() => { loadHistStats(); }, []);
 
-  const loadCeremonies = async () => {
-    // Fix 2: use .limit(10000) to get all rows past the default 1000 cap
+  const loadHistStats = async () => {
     const { data } = await supabase
-      .from("historical_ceremonies")
-      .select("ceremony, year")
-      .order("ceremony", { ascending: false })
-      .limit(10000);
-    const seen = new Set();
-    const list = [];
-    for (const row of (data || [])) {
-      if (!seen.has(row.ceremony)) { seen.add(row.ceremony); list.push(row); }
-    }
-    setCeremonies(list);
-    setLoading(false);
-  };
-
-  const loadHistPickCount = async () => {
-    const { count } = await supabase
       .from("historical_picks")
-      .select("*", { count: "exact", head: true })
+      .select("ceremony, category, nominee_index")
       .eq("user_id", user.id);
-    setHistPickCount(count || 0);
+    if (!data || data.length === 0) return;
+
+    // Fetch winner flags for all picked nominees
+    const ceremonies = [...new Set(data.map(p => p.ceremony))];
+    const { data: nomData } = await supabase
+      .from("historical_ceremonies")
+      .select("ceremony, category, nominee_index, winner")
+      .in("ceremony", ceremonies);
+
+    const nomMap = {};
+    (nomData || []).forEach(n => { nomMap[`${n.ceremony}-${n.category}-${n.nominee_index}`] = n.winner; });
+
+    const matched = data.filter(p => nomMap[`${p.ceremony}-${p.category}-${p.nominee_index}`]).length;
+    setHistStats({ total: data.length, matched, ceremonies: ceremonies.length });
   };
 
   const selectCeremony = async (num) => {
@@ -3635,8 +3704,7 @@ function HistoryScreen({ user, onGoHome }) {
     setSaving(false);
     setSavedMsg(true);
     setTimeout(() => setSavedMsg(false), 1500);
-
-    // Refresh community counts
+    // Refresh counts
     const { data: countData } = await supabase
       .from("historical_picks").select("category, nominee_index").eq("ceremony", selected);
     const cm = {};
@@ -3645,26 +3713,25 @@ function HistoryScreen({ user, onGoHome }) {
       cm[p.category][p.nominee_index] = (cm[p.category][p.nominee_index] || 0) + 1;
     });
     setPickCounts(cm);
-    loadHistPickCount();
+    loadHistStats();
   };
 
-  // Fix 3: trivia — guess who won, then reveal
   const handleWonGuess = (category, nomineeIndex) => {
-    if (revealed[category]) return; // already revealed
+    if (revealed[category]) return;
     setWonGuesses(prev => ({ ...prev, [category]: nomineeIndex }));
   };
 
   const revealWinner = (category) => {
-    if (wonGuesses[category] === undefined) return; // must guess first
+    if (wonGuesses[category] === undefined) return;
     setRevealed(prev => ({ ...prev, [category]: true }));
   };
 
   const CATEGORY_ORDER = [
-    "Best Picture", "Directing",
-    "Actor in a Leading Role", "Actress in a Leading Role",
-    "Actor in a Supporting Role", "Actress in a Supporting Role",
-    "Writing (Original Screenplay)", "Writing (Adapted Screenplay)",
-    "Film Editing", "Cinematography",
+    "Best Picture","Directing",
+    "Actor in a Leading Role","Actress in a Leading Role",
+    "Actor in a Supporting Role","Actress in a Supporting Role",
+    "Writing (Original Screenplay)","Writing (Adapted Screenplay)",
+    "Film Editing","Cinematography",
   ];
 
   const byCategory = {};
@@ -3673,11 +3740,9 @@ function HistoryScreen({ user, onGoHome }) {
     byCategory[row.category].push(row);
   }
 
-  const selectedYear = ceremonies.find(c => c.ceremony === selected)?.year;
+  const selectedEntry = CEREMONY_LIST.find(c => c.ceremony === selected);
   const ordinal = n => `${n}${[,"st","nd","rd"][n % 10] || "th"}`;
   const ordStr = selected ? ordinal(selected) : "";
-
-  if (loading) return <div className="loading-screen"><div className="loading-inner">Loading…</div></div>;
 
   return (
     <div className="app">
@@ -3691,9 +3756,6 @@ function HistoryScreen({ user, onGoHome }) {
           <div className="header-right">
             {saving && <span className="save-indicator">saving…</span>}
             {savedMsg && !saving && <span className="save-indicator saved">✓</span>}
-            {histPickCount > 0 && !selected && (
-              <span className="hist-pick-count">{histPickCount} pick{histPickCount !== 1 ? "s" : ""} logged</span>
-            )}
             <button className="signout-btn" onClick={() => supabase.auth.signOut()}>Sign Out</button>
           </div>
         </div>
@@ -3709,8 +3771,29 @@ function HistoryScreen({ user, onGoHome }) {
               Select a year — test your knowledge of who won, and weigh in on who <em>should</em> have.
             </p>
           </div>
+
+          {/* Stats strip — shown once user has picks */}
+          {histStats && histStats.total > 0 && (
+            <div className="hist-browser-stats">
+              <div className="hist-stat">
+                <span className="hist-stat-num">{histStats.total}</span>
+                <span className="hist-stat-label">Should Wins logged</span>
+              </div>
+              <div className="hist-stat">
+                <span className="hist-stat-num" style={{ color: "var(--crimson)" }}>{histStats.ceremonies}</span>
+                <span className="hist-stat-label">Ceremonies visited</span>
+              </div>
+              <div className="hist-stat">
+                <span className="hist-stat-num" style={{ color: "var(--gold)" }}>
+                  {Math.round((histStats.matched / histStats.total) * 100)}%
+                </span>
+                <span className="hist-stat-label">Taste matched winner</span>
+              </div>
+            </div>
+          )}
+
           <div className="history-ceremony-grid">
-            {ceremonies.map(c => (
+            {CEREMONY_LIST.map(c => (
               <button key={c.ceremony} className="history-ceremony-btn" onClick={() => selectCeremony(c.ceremony)}>
                 <span className="hcb-year">{c.year}</span>
                 <span className="hcb-num">{ordinal(c.ceremony)}</span>
@@ -3726,11 +3809,11 @@ function HistoryScreen({ user, onGoHome }) {
           <div className="history-ballot-header">
             <div>
               <h2 className="history-ballot-title">{ordStr} Academy Awards</h2>
-              <p className="history-ballot-year">{selectedYear} ceremony</p>
+              <p className="history-ballot-year">{selectedEntry?.year} ceremony</p>
             </div>
             <div className="history-ballot-legend">
               <p className="history-legend-item"><span className="history-legend-won">★ Won</span> — guess who won, then reveal</p>
-              <p className="history-legend-item"><span className="history-legend-should">♥ Should Win</span> — your pick, saved to your profile</p>
+              <p className="history-legend-item"><span className="history-legend-should">♥ Should Win</span> — your pick, saved to profile</p>
             </div>
           </div>
 
@@ -3758,10 +3841,8 @@ function HistoryScreen({ user, onGoHome }) {
                       const isGuessed = myGuess === nom.nominee_index;
                       const isShouldPick = myShould === nom.nominee_index;
                       const pct = totalCatPicks > 0
-                        ? Math.round(((catCounts[nom.nominee_index] || 0) / totalCatPicks) * 100)
-                        : 0;
+                        ? Math.round(((catCounts[nom.nominee_index] || 0) / totalCatPicks) * 100) : 0;
 
-                      // Won column state
                       let wonBtnClass = "pick-btn will-btn";
                       let wonBtnContent = "☆";
                       if (!isRevealed) {
@@ -3786,32 +3867,23 @@ function HistoryScreen({ user, onGoHome }) {
                                 : displayFilm
                               }
                             </span>
-                            {isRevealed && pct > 0 && (
-                              <span className="agg-badge should-agg">{pct}%</span>
-                            )}
+                            {isRevealed && pct > 0 && <span className="agg-badge should-agg">{pct}%</span>}
                           </div>
                           <div className="nominee-picks">
-                            <button
-                              className={wonBtnClass}
+                            <button className={wonBtnClass}
                               onClick={() => handleWonGuess(cat, nom.nominee_index)}
                               disabled={isRevealed}
                               title={isRevealed ? "Already revealed" : "Guess who won"}
-                            >
-                              {wonBtnContent}
-                            </button>
+                            >{wonBtnContent}</button>
                             <button
                               className={`pick-btn should-btn ${isShouldPick ? "selected" : ""}`}
                               onClick={() => handleShouldPick(cat, nom.nominee_index)}
-                              title="Mark as your Should Win"
-                            >
-                              {isShouldPick ? "♥" : "♡"}
-                            </button>
+                            >{isShouldPick ? "♥" : "♡"}</button>
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                  {/* Reveal button — shown once a guess is made */}
                   {!isRevealed && myGuess !== undefined && (
                     <button className="history-reveal-btn" onClick={() => revealWinner(cat)}>
                       Reveal winner →
@@ -3819,7 +3891,7 @@ function HistoryScreen({ user, onGoHome }) {
                   )}
                   {isRevealed && (
                     <p className={`history-reveal-result ${guessCorrect ? "correct" : "wrong"}`}>
-                      {guessCorrect ? "✓ Correct!" : `✗ The winner was ${actualWinner?.name || actualWinner?.film}`}
+                      {guessCorrect ? "✓ Correct!" : `✗ The winner was ${actualWinner?.name !== actualWinner?.film && actualWinner?.name ? actualWinner.name : actualWinner?.film}`}
                     </p>
                   )}
                 </div>
