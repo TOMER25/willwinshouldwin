@@ -468,7 +468,7 @@ function OnboardingModal({ onDismiss }) {
   );
 }
 
-function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin, allShows }) {
+function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin, onGoHistory, allShows }) {
   return (
     <div className="home-screen">
       <div className="home-header">
@@ -521,6 +521,23 @@ function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin, allShows }) {
             )}
           </div>
         </div>
+
+        {/* Oscars History */}
+        <div className="shows-section">
+          <h2 className="shows-heading">Oscars History</h2>
+          <div className="shows-grid">
+            <button className="show-card show-card-history" onClick={onGoHistory}>
+              <div className="show-card-top">
+                <span className="show-badge badge-history">98 Ceremonies</span>
+              </div>
+              <h3 className="show-name">The Academy Awards</h3>
+              <p className="show-org">1927 — Present</p>
+              <p className="show-cats">Best Picture · Director · Acting · Screenplay · and more</p>
+              <div className="show-cta">Who should have won? →</div>
+            </button>
+          </div>
+        </div>
+
       </div>
 
       <footer className="app-footer">willwinshouldwin.com</footer>
@@ -3439,7 +3456,378 @@ function Profile({ user, picks, show }) {
             })}
           </div>
         )}
+
+        {/* ── Historical Picks ── */}
+        <HistoricalPicksSection userId={user.id} />
+
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// HISTORICAL PICKS SECTION (used in Profile)
+// ============================================================
+function HistoricalPicksSection({ userId }) {
+  const [picks, setPicks]       = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [isOpen, setIsOpen]     = useState(false);
+  const [nominees, setNominees] = useState({}); // { `${ceremony}-${category}-${index}`: row }
+
+  useEffect(() => {
+    loadPicks();
+  }, [userId]);
+
+  const loadPicks = async () => {
+    const { data } = await supabase
+      .from("historical_picks")
+      .select("ceremony, category, nominee_index, updated_at")
+      .eq("user_id", userId)
+      .order("ceremony", { ascending: false });
+    if (!data || data.length === 0) { setLoading(false); return; }
+    setPicks(data);
+
+    // Load the nominee names for each pick
+    const conditions = data.map(p =>
+      `and(ceremony.eq.${p.ceremony},category.eq.${encodeURIComponent(p.category)},nominee_index.eq.${p.nominee_index})`
+    );
+    const { data: nomData } = await supabase
+      .from("historical_ceremonies")
+      .select("ceremony, category, nominee_index, name, film, winner")
+      .or(conditions.join(","));
+
+    const nm = {};
+    (nomData || []).forEach(n => {
+      nm[`${n.ceremony}-${n.category}-${n.nominee_index}`] = n;
+    });
+    setNominees(nm);
+    setLoading(false);
+  };
+
+  if (loading || picks.length === 0) return null;
+
+  // Group by ceremony
+  const byCeremony = {};
+  for (const p of picks) {
+    if (!byCeremony[p.ceremony]) byCeremony[p.ceremony] = [];
+    byCeremony[p.ceremony].push(p);
+  }
+  const ceremonyNums = Object.keys(byCeremony).map(Number).sort((a, b) => b - a);
+
+  const ordinal = n => `${n}${["th","st","nd","rd"][Math.min(n % 10, 3)] || "th"}`;
+
+  return (
+    <div className="profile-hist-section">
+      <button className="col-toggle" onClick={() => setIsOpen(o => !o)}>
+        <span className="col-toggle-label">Historical Picks</span>
+        <span className="col-toggle-meta">{picks.length} pick{picks.length !== 1 ? "s" : ""} across {ceremonyNums.length} ceremoni{ceremonyNums.length !== 1 ? "es" : "y"}</span>
+        <span className="col-toggle-chevron">{isOpen ? "−" : "+"}</span>
+      </button>
+
+      {isOpen && (
+        <div className="hist-picks-list">
+          {ceremonyNums.map(num => {
+            const catPicks = byCeremony[num];
+            return (
+              <div key={num} className="hist-picks-ceremony">
+                <p className="hist-picks-ceremony-label">{ordinal(num)} Academy Awards</p>
+                {catPicks.map(p => {
+                  const nom = nominees[`${p.ceremony}-${p.category}-${p.nominee_index}`];
+                  if (!nom) return null;
+                  const displayFilm = nom.film?.includes("|") ? nom.film.split("|")[0] + "…" : nom.film;
+                  const displayName = nom.name !== nom.film && nom.name
+                    ? `${nom.name} — ${displayFilm}`
+                    : displayFilm;
+                  return (
+                    <div key={p.category} className="hist-pick-row">
+                      <span className="hist-pick-cat">{p.category}</span>
+                      <span className="hist-pick-name">
+                        ♥ {displayName}
+                        {nom.winner && <span className="hist-pick-match"> · matched winner ✓</span>}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// HISTORY SCREEN
+// ============================================================
+function HistoryScreen({ user, onGoHome }) {
+  const [ceremonies, setCeremonies]   = useState([]); // [{ ceremony, year }]
+  const [selected, setSelected]       = useState(null); // ceremony number
+  const [nominees, setNominees]       = useState([]);   // rows for selected ceremony
+  const [picks, setPicks]             = useState({});   // { category: nominee_index }
+  const [pickCounts, setPickCounts]   = useState({});   // { category: { index: count } }
+  const [loading, setLoading]         = useState(true);
+  const [saving, setSaving]           = useState(false);
+  const [savedMsg, setSavedMsg]       = useState(false);
+  const [histPickCount, setHistPickCount] = useState(0); // total historical picks by this user
+
+  // Load ceremony list + user's total pick count on mount
+  useEffect(() => {
+    loadCeremonies();
+    loadHistPickCount();
+  }, []);
+
+  const loadCeremonies = async () => {
+    const { data } = await supabase
+      .from("historical_ceremonies")
+      .select("ceremony, year")
+      .order("ceremony", { ascending: false });
+    // Deduplicate by ceremony number
+    const seen = new Set();
+    const list = [];
+    for (const row of (data || [])) {
+      if (!seen.has(row.ceremony)) { seen.add(row.ceremony); list.push(row); }
+    }
+    setCeremonies(list);
+    setLoading(false);
+  };
+
+  const loadHistPickCount = async () => {
+    const { count } = await supabase
+      .from("historical_picks")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id);
+    setHistPickCount(count || 0);
+  };
+
+  const selectCeremony = async (ceremonyNum) => {
+    setSelected(ceremonyNum);
+    setNominees([]);
+    setPicks({});
+    setPickCounts({});
+
+    // Load nominees + user picks + community pick counts in parallel
+    const [nomRes, pickRes, countRes] = await Promise.all([
+      supabase.from("historical_ceremonies")
+        .select("*").eq("ceremony", ceremonyNum).order("category").order("nominee_index"),
+      supabase.from("historical_picks")
+        .select("category, nominee_index").eq("user_id", user.id).eq("ceremony", ceremonyNum),
+      supabase.from("historical_picks")
+        .select("category, nominee_index").eq("ceremony", ceremonyNum),
+    ]);
+
+    setNominees(nomRes.data || []);
+
+    // User picks: { category: nominee_index }
+    const pm = {};
+    (pickRes.data || []).forEach(p => { pm[p.category] = p.nominee_index; });
+    setPicks(pm);
+
+    // Community counts: { category: { nominee_index: count } }
+    const cm = {};
+    (countRes.data || []).forEach(p => {
+      if (!cm[p.category]) cm[p.category] = {};
+      cm[p.category][p.nominee_index] = (cm[p.category][p.nominee_index] || 0) + 1;
+    });
+    setPickCounts(cm);
+  };
+
+  const handlePick = async (category, nomineeIndex) => {
+    const current = picks[category];
+    const isDeselect = current === nomineeIndex;
+    const newPicks = { ...picks };
+
+    setSaving(true);
+
+    if (isDeselect) {
+      // Remove pick
+      delete newPicks[category];
+      await supabase.from("historical_picks")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("ceremony", selected)
+        .eq("category", category);
+    } else {
+      newPicks[category] = nomineeIndex;
+      await supabase.from("historical_picks")
+        .upsert({
+          user_id: user.id,
+          ceremony: selected,
+          category,
+          nominee_index: nomineeIndex,
+        }, { onConflict: "user_id,ceremony,category" });
+    }
+
+    setPicks(newPicks);
+    setSaving(false);
+    setSavedMsg(true);
+    setTimeout(() => setSavedMsg(false), 1500);
+
+    // Refresh community counts for this ceremony
+    const { data: countData } = await supabase
+      .from("historical_picks")
+      .select("category, nominee_index").eq("ceremony", selected);
+    const cm = {};
+    (countData || []).forEach(p => {
+      if (!cm[p.category]) cm[p.category] = {};
+      cm[p.category][p.nominee_index] = (cm[p.category][p.nominee_index] || 0) + 1;
+    });
+    setPickCounts(cm);
+    loadHistPickCount();
+  };
+
+  // Group nominees by category
+  const byCategory = {};
+  for (const row of nominees) {
+    if (!byCategory[row.category]) byCategory[row.category] = [];
+    byCategory[row.category].push(row);
+  }
+
+  const CATEGORY_ORDER = [
+    "Best Picture", "Directing",
+    "Actor in a Leading Role", "Actress in a Leading Role",
+    "Actor in a Supporting Role", "Actress in a Supporting Role",
+    "Writing (Original Screenplay)", "Writing (Adapted Screenplay)",
+    "Film Editing", "Cinematography",
+  ];
+
+  const selectedYear = ceremonies.find(c => c.ceremony === selected)?.year;
+  const ordinal = selected ? `${selected}${["th","st","nd","rd"][Math.min(selected % 10, 3)] || "th"}` : "";
+
+  if (loading) return <div className="loading-screen"><div className="loading-inner">Loading…</div></div>;
+
+  return (
+    <div className="app">
+      <header className="app-header">
+        <div className="header-top">
+          <div className="header-left">
+            <button className="back-home-btn" onClick={selected ? () => setSelected(null) : onGoHome} title={selected ? "All ceremonies" : "Home"}>←</button>
+            <Logo onClick={onGoHome} />
+            {selected && <span className="show-context-badge">{ordinal} Academy Awards</span>}
+          </div>
+          <div className="header-right">
+            {saving && <span className="save-indicator">saving…</span>}
+            {savedMsg && !saving && <span className="save-indicator saved">✓</span>}
+            {histPickCount > 0 && !selected && (
+              <span className="hist-pick-count">{histPickCount} pick{histPickCount !== 1 ? "s" : ""} logged</span>
+            )}
+            <button className="signout-btn" onClick={() => supabase.auth.signOut()}>Sign Out</button>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Ceremony browser ── */}
+      {!selected && (
+        <div className="app-main">
+          <div className="history-intro">
+            <h2 className="section-title">The Academy Awards</h2>
+            <p className="history-intro-body">
+              98 ceremonies. Decades of great films, landmark performances, and controversial upsets.
+              Select a year and weigh in — who won, and who <em>should</em> have?
+            </p>
+          </div>
+          <div className="history-ceremony-grid">
+            {ceremonies.map(c => {
+              const hasPicks = false; // would need a per-ceremony pick map — skip for now
+              return (
+                <button
+                  key={c.ceremony}
+                  className="history-ceremony-btn"
+                  onClick={() => selectCeremony(c.ceremony)}
+                >
+                  <span className="hcb-year">{c.year}</span>
+                  <span className="hcb-num">{c.ceremony}th</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Ceremony ballot ── */}
+      {selected && nominees.length > 0 && (
+        <div className="app-main">
+          <div className="history-ballot-header">
+            <div>
+              <h2 className="history-ballot-title">{ordinal} Academy Awards</h2>
+              <p className="history-ballot-year">{selectedYear} ceremony</p>
+            </div>
+            <p className="history-ballot-instruction">
+              ♥ marks who you think <em>should</em> have won. The actual winner is shown with ★.
+            </p>
+          </div>
+
+          <div className="picks-grid">
+            {CATEGORY_ORDER.filter(cat => byCategory[cat]).map(cat => {
+              const catNominees = byCategory[cat];
+              const myPick = picks[cat];
+              const catCounts = pickCounts[cat] || {};
+              const totalCatPicks = Object.values(catCounts).reduce((a, b) => a + b, 0);
+
+              return (
+                <div key={cat} className="category-card history-category-card">
+                  <h3 className="category-name">{cat}</h3>
+                  <div className="pick-headers">
+                    <span className="pick-label will-label">Won ★</span>
+                    <span className="pick-label should-label">Should Win ♥</span>
+                  </div>
+                  <div className="nominees-list">
+                    {catNominees.map(nom => {
+                      const isWinner = nom.winner;
+                      const isPicked = myPick === nom.nominee_index;
+                      const count = catCounts[nom.nominee_index] || 0;
+                      const pct = totalCatPicks > 0 ? Math.round((count / totalCatPicks) * 100) : 0;
+                      // Clean up film name for display — remove pipe-separated films
+                      const displayFilm = nom.film.includes("|") ? nom.film.split("|")[0] + "…" : nom.film;
+
+                      return (
+                        <div
+                          key={nom.nominee_index}
+                          className={`nominee-row ${isPicked ? "picked" : ""} ${isWinner ? "nominee-winner" : ""}`}
+                        >
+                          <div className="nominee-name">
+                            {isWinner && <span className="winner-trophy">★ </span>}
+                            <span className="history-nominee-text">
+                              {nom.name !== nom.film && nom.name
+                                ? <><strong>{nom.name}</strong><span className="history-nominee-film"> — {displayFilm}</span></>
+                                : displayFilm
+                              }
+                            </span>
+                            {pct > 0 && (
+                              <span className="agg-badge should-agg">{pct}%</span>
+                            )}
+                          </div>
+                          <div className="nominee-picks">
+                            {/* Won column — shows actual winner, not interactive */}
+                            <span className={`pick-btn will-btn ${isWinner ? "selected" : ""}`} style={{ cursor: "default" }}>
+                              {isWinner ? "★" : ""}
+                            </span>
+                            {/* Should Win — interactive */}
+                            <button
+                              className={`pick-btn should-btn ${isPicked ? "selected" : ""}`}
+                              onClick={() => handlePick(cat, nom.nominee_index)}
+                            >
+                              {isPicked ? "♥" : "♡"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {selected && nominees.length === 0 && (
+        <div className="app-main"><div className="loading">Loading ceremony…</div></div>
+      )}
+
+      <footer className="app-footer">
+        {selected ? `${ordinal} Academy Awards · willwinshouldwin.com` : "Oscars History · willwinshouldwin.com"}
+      </footer>
     </div>
   );
 }
@@ -4592,6 +4980,7 @@ export default function App() {
 
   if (!user) return <AuthModal onAuth={setUser} />;
   if (screen === "admin") return <AdminPanel onBack={() => { setScreen("home"); loadAllShows(); }} />;
+  if (screen === "history") return <HistoryScreen user={user} onGoHome={() => setScreen("home")} />;
   if (screen === "profile" && activeShow) {
     return <ShowApp show={activeShow} user={user} allShows={allShows} defaultView="profile" onGoHome={() => { setScreen("home"); setActiveShow(null); }} pendingLeagueCode={pendingLeagueCode} onClearLeagueCode={() => { setPendingLeagueCode(null); sessionStorage.removeItem("pendingLeagueCode"); }} />;
   }
@@ -4611,6 +5000,7 @@ export default function App() {
         user={user}
         onGoProfile={() => { const first = allShows[0]; if (first) { setActiveShow(first); setScreen("profile"); } }}
         onGoAdmin={() => setScreen("admin")}
+        onGoHistory={() => setScreen("history")}
         allShows={allShows}
       />
       {showOnboarding && <OnboardingModal onDismiss={handleDismissOnboarding} />}
