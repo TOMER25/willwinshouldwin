@@ -2624,3 +2624,15 @@ body {
   border-radius: var(--radius);
   margin-bottom: 0.25rem;
 }
+
+/* History ceremony grid — picked indicator */
+.history-ceremony-btn--picked {
+  border-color: rgba(201,76,94,0.5);
+  background: linear-gradient(160deg, rgba(201,76,94,0.1) 0%, var(--surface) 70%);
+}
+.history-ceremony-btn--picked .hcb-year { color: var(--white); }
+.hcb-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--crimson); flex-shrink: 0;
+  margin-top: 2px;
+}

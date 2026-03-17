@@ -3617,7 +3617,8 @@ function HistoryScreen({ user, onGoHome }) {
   const [pickCounts, setPickCounts]   = useState({});
   const [saving, setSaving]           = useState(false);
   const [savedMsg, setSavedMsg]       = useState(false);
-  const [histStats, setHistStats]     = useState(null);
+  const [histStats, setHistStats]       = useState(null);
+  const [pickedCeremonies, setPickedCeremonies] = useState(new Set());
 
   useEffect(() => { loadHistStats(); }, []);
 
@@ -3632,6 +3633,7 @@ function HistoryScreen({ user, onGoHome }) {
     (nomData || []).forEach(n => { nomMap[`${n.ceremony}-${n.category}-${n.nominee_index}`] = n.winner; });
     const matched = data.filter(p => nomMap[`${p.ceremony}-${p.category}-${p.nominee_index}`]).length;
     setHistStats({ total: data.length, matched, ceremonies: ceremonies.length });
+    setPickedCeremonies(new Set(ceremonies));
   };
 
   const selectCeremony = async (num) => {
@@ -3756,12 +3758,16 @@ function HistoryScreen({ user, onGoHome }) {
             </div>
           )}
           <div className="history-ceremony-grid">
-            {CEREMONY_LIST.map(c => (
-              <button key={c.ceremony} className="history-ceremony-btn" onClick={() => selectCeremony(c.ceremony)}>
-                <span className="hcb-year">{c.year}</span>
-                <span className="hcb-num">{ordinal(c.ceremony)}</span>
-              </button>
-            ))}
+            {CEREMONY_LIST.map(c => {
+              const hasPicks = pickedCeremonies.has(c.ceremony);
+              return (
+                <button key={c.ceremony} className={`history-ceremony-btn ${hasPicks ? "history-ceremony-btn--picked" : ""}`} onClick={() => selectCeremony(c.ceremony)}>
+                  <span className="hcb-year">{c.year}</span>
+                  <span className="hcb-num">{ordinal(c.ceremony)}</span>
+                  {hasPicks && <span className="hcb-dot" />}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
