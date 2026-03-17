@@ -193,6 +193,7 @@ function AuthModal({ onAuth }) {
   const [showForgot, setShowForgot] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async () => {
     setLoading(true); setError("");
@@ -300,7 +301,12 @@ function AuthModal({ onAuth }) {
         </div>
         {mode === "signup" && <input className="auth-input" placeholder="Display name (optional)" value={displayName} onChange={e => setDisplayName(e.target.value)} />}
         <input className="auth-input" type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
-        <input className="auth-input" type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} />
+        <div className="auth-pw-wrap">
+          <input className="auth-input" type={showPassword ? "text" : "password"} placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} />
+          <button className="auth-pw-toggle" type="button" onClick={() => setShowPassword(v => !v)} tabIndex={-1} aria-label={showPassword ? "Hide password" : "Show password"}>
+            {showPassword ? "🙈" : "👁"}
+          </button>
+        </div>
         {error && <div className="auth-error">{error}</div>}
         <button className="auth-submit" onClick={handleSubmit} disabled={loading}>
           {loading ? "…" : mode === "login" ? "Sign In" : "Create Account"}
@@ -324,6 +330,7 @@ function ResetPasswordScreen({ onDone }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleReset = async () => {
     if (!password) { setError("Please enter a new password."); return; }
@@ -357,21 +364,28 @@ function ResetPasswordScreen({ onDone }) {
       <div className="auth-modal">
         <Logo />
         <p className="auth-tagline">Choose a new password.</p>
-        <input
-          className="auth-input"
-          type="password"
-          placeholder="New password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-        />
-        <input
-          className="auth-input"
-          type="password"
-          placeholder="Confirm new password"
-          value={confirm}
-          onChange={e => setConfirm(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && handleReset()}
-        />
+        <div className="auth-pw-wrap">
+          <input
+            className="auth-input"
+            type={showPassword ? "text" : "password"}
+            placeholder="New password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+          />
+          <button className="auth-pw-toggle" type="button" onClick={() => setShowPassword(v => !v)} tabIndex={-1} aria-label={showPassword ? "Hide password" : "Show password"}>
+            {showPassword ? "🙈" : "👁"}
+          </button>
+        </div>
+        <div className="auth-pw-wrap">
+          <input
+            className="auth-input"
+            type={showPassword ? "text" : "password"}
+            placeholder="Confirm new password"
+            value={confirm}
+            onChange={e => setConfirm(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleReset()}
+          />
+        </div>
         {error && <div className="auth-error">{error}</div>}
         <button className="auth-submit" onClick={handleReset} disabled={loading}>
           {loading ? "…" : "Set New Password"}
