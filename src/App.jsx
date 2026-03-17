@@ -3411,8 +3411,15 @@ function Profile({ user, picks, show }) {
         {/* ── Results after ceremony ── */}
         {gradedShows.length > 0 && (
           <div className="profile-picks-summary">
-            <h3 className="profile-section-title">Your Results</h3>
-            {gradedShows.map(({ show: s, willCorrect, shouldCorrect, graded }) => {
+            <button
+              className="results-accordion-header results-accordion-header--outer"
+              onClick={() => setResultsOpen(o => ({ ...o, __outer: !o.__outer }))}
+            >
+              <span className="results-acc-name" style={{ fontFamily: "'Playfair Display', serif", fontSize: "1rem" }}>Your Results</span>
+              <span className="results-acc-scores" style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>{gradedShows.length} show{gradedShows.length !== 1 ? "s" : ""}</span>
+              <span className="results-acc-chevron">{resultsOpen.__outer ? "−" : "+"}</span>
+            </button>
+            {resultsOpen.__outer && gradedShows.map(({ show: s, willCorrect, shouldCorrect, graded }) => {
               const isOpen = !!resultsOpen[s.id];
               const showPicks = allPicksByShow[s.id] || {};
               const showWinners = s.id === show.id ? winners : {};
@@ -4566,12 +4573,13 @@ function AdminPanel({ onBack }) {
 // ============================================================
 function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, onBack }) {
   const [profileData, setProfileData] = useState(null);
-  const [picks, setPicks] = useState({});       // { show_id: { cat_id: { will_win, should_win } } }
-  const [winners, setWinners] = useState({});   // { show_id: { cat_id: winner } }
+  const [picks, setPicks] = useState({});
+  const [winners, setWinners] = useState({});
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [copied, setCopied] = useState(false);
   const [theme, setTheme] = useState(COLOR_THEMES[0]);
+  const [openShows, setOpenShows] = useState({});
 
   useEffect(() => { loadAll(); }, [targetUserId]);
 
@@ -4808,51 +4816,53 @@ function PublicProfile({ targetUserId, targetUsername, allShows, currentUser, on
               <p>{displayName} hasn't made any picks yet.</p>
             </div>
           ) : (
-            showStats.map(({ show, total, willPicked, shouldPicked, bothPicked, willCorrect, shouldCorrect, graded }) => (
-              <div key={show.id} className={`public-show-section ${pubBestShow?.show.id === show.id ? "best-show" : ""}`}>
-                <div className="public-show-header">
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <span className="public-show-name">{show.name}</span>
-                    {pubBestShow?.show.id === show.id && <span className="best-show-badge">🏆 Best</span>}
-                  </div>
-                  {graded > 0 && (
-                    <span className="public-show-scores">
-                      <span style={{ color: theme.will }}>★ {willCorrect}/{graded}</span>
-                      <span className="sbc-divider">·</span>
-                      <span style={{ color: theme.should }}>♥ {shouldCorrect}/{graded}</span>
-                    </span>
+            showStats.map(({ show, total, willPicked, shouldPicked, bothPicked, willCorrect, shouldCorrect, graded }) => {
+              const isOpen = !!openShows[show.id];
+              const isBest = pubBestShow?.show.id === show.id;
+              return (
+                <div key={show.id} className={`public-show-section ${isBest ? "best-show" : ""}`}>
+                  <button className="public-show-accordion-btn" onClick={() => setOpenShows(o => ({ ...o, [show.id]: !o[show.id] }))}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: 1, minWidth: 0 }}>
+                      <span className="public-show-name">{show.name} {show.year}</span>
+                      {isBest && <span className="best-show-badge">🏆 Best</span>}
+                    </div>
+                    {graded > 0 && (
+                      <span className="public-show-scores">
+                        <span style={{ color: theme.will }}>★ {willCorrect}/{graded}</span>
+                        <span className="sbc-divider">·</span>
+                        <span style={{ color: theme.should }}>♥ {shouldCorrect}/{graded}</span>
+                      </span>
+                    )}
+                    <span className="results-acc-chevron" style={{ marginLeft: "0.5rem" }}>{isOpen ? "−" : "+"}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="public-picks-grid">
+                      {show.categories.map(cat => {
+                        const p = picks[show.id]?.[cat.id] || {};
+                        const win = winners[show.id]?.[cat.id];
+                        const wHit = win && p.will_win === win;
+                        const sHit = win && p.should_win === win;
+                        if (!p.will_win && !p.should_win) return null;
+                        return (
+                          <div key={cat.id} className={`public-pick-row ${wHit ? "public-pick-correct" : ""}`}
+                               style={wHit ? { borderLeftColor: theme.will } : {}}>
+                            <span className="public-cat-name">{cat.name}</span>
+                            <div className="public-picks">
+                              {p.will_win && (
+                                <span className="public-pick-item" style={{ color: wHit ? theme.will : theme.will + "aa" }}>★ {p.will_win}</span>
+                              )}
+                              {p.should_win && (
+                                <span className="public-pick-item" style={{ color: sHit ? theme.should : theme.should + "aa" }}>♥ {p.should_win}</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
-
-                <div className="public-picks-grid">
-                  {show.categories.map(cat => {
-                    const p = picks[show.id]?.[cat.id] || {};
-                    const win = winners[show.id]?.[cat.id];
-                    const wHit = win && p.will_win === win;
-                    const sHit = win && p.should_win === win;
-                    if (!p.will_win && !p.should_win) return null;
-                    return (
-                      <div key={cat.id} className={`public-pick-row ${wHit ? "public-pick-correct" : ""}`}
-                           style={wHit ? { borderLeftColor: theme.will } : {}}>
-                        <span className="public-cat-name">{cat.name}</span>
-                        <div className="public-picks">
-                          {p.will_win && (
-                            <span className="public-pick-item" style={{ color: wHit ? theme.will : theme.will + "aa" }}>
-                              ★ {p.will_win}
-                            </span>
-                          )}
-                          {p.should_win && (
-                            <span className="public-pick-item" style={{ color: sHit ? theme.should : theme.should + "aa" }}>
-                              ♥ {p.should_win}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
 
           {/* CTA for visitors not logged in */}
