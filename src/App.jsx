@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -3759,11 +3759,20 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
     const loadAll = async () => {
       setLoading(true);
       setLoadError(null);
-      const { data, error } = await supabase
-        .from("historical_ceremonies")
-        .select("ceremony, category, nominee_index, winner, film, name");
-      if (error) { setLoadError(error.message); setLoading(false); return; }
-      setAllData(data || []);
+      const PAGE = 1000;
+      let all = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from("historical_ceremonies")
+          .select("ceremony, category, nominee_index, winner, film, name")
+          .range(from, from + PAGE - 1);
+        if (error) { setLoadError(error.message); setLoading(false); return; }
+        if (data && data.length > 0) all = all.concat(data);
+        if (!data || data.length < PAGE) break;
+        from += PAGE;
+      }
+      setAllData(all);
       setLoading(false);
     };
     loadAll();
