@@ -3718,7 +3718,7 @@ const FILM_PRESETS = [
   { label: "Won Picture + Editing", cats: ["Best Picture","Film Editing"], mode: "AND", type: "wins" },
   { label: "Won Picture + Director", cats: ["Best Picture","Directing"], mode: "AND", type: "wins" },
   { label: "Won Picture + Cinematography", cats: ["Best Picture","Cinematography"], mode: "AND", type: "wins" },
-  { label: "Most nominated, no wins", cats: [], mode: "AND", type: "nominations", sortBy: "noms", minNoms: 5 },
+  { label: "Most nominated, no wins", cats: [], mode: "AND", type: "nominations", sortBy: "noms", minNoms: 5, special: "NO_WINS" },
   { label: "Won acting + picture", cats: ["Best Picture",...ACTING_CATS], mode: "AND_PICTURE_ACTING", type: "wins" },
 ];
 
@@ -3743,7 +3743,8 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
   const [filmDecadeFrom, setFilmDecadeFrom] = useState("");
   const [filmDecadeTo, setFilmDecadeTo] = useState("");
   const [filmSort, setFilmSort] = useState({ col: "wins", dir: "desc" });
-  const [filmSpecial, setFilmSpecial] = useState(null); // for special preset modes
+  const [filmSpecial, setFilmSpecial] = useState(null);
+  const [filmMinNoms, setFilmMinNoms] = useState(0);
 
   // People tab state
   const [personQuery, setPersonQuery] = useState("");
@@ -3825,21 +3826,22 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
 
   // Film results
   const filmResults = useMemo(() => {
-    const hasFilters = filmCats.length > 0 || filmDecadeFrom || filmDecadeTo;
+    const hasFilters = filmCats.length > 0 || filmDecadeFrom || filmDecadeTo || filmMinNoms > 0 || filmSpecial === "NO_WINS";
     if (!hasFilters) return [];
     return filmIndex.filter(f => {
       if (!yearNumInDecadeRange(f.yearNum, filmDecadeFrom, filmDecadeTo)) return false;
+      if (filmMinNoms > 0 && f.noms.size < filmMinNoms) return false;
+      if (filmSpecial === "NO_WINS" && f.wins.size > 0) return false;
       const pool = filmType === "wins" ? f.wins : f.noms;
       if (!filmCats.length) return true;
       if (filmSpecial === "AND_PICTURE_ACTING") {
-        // Must have won picture AND at least one acting category
         if (!pool.has("Best Picture")) return false;
         return ACTING_CATS.some(c => pool.has(c));
       }
       if (filmMode === "AND") return filmCats.every(c => pool.has(c));
       return filmCats.some(c => pool.has(c));
     });
-  }, [filmIndex, filmCats, filmMode, filmType, filmDecadeFrom, filmDecadeTo, filmSpecial]);
+  }, [filmIndex, filmCats, filmMode, filmType, filmDecadeFrom, filmDecadeTo, filmSpecial, filmMinNoms]);
 
   const sortedFilmResults = useMemo(() => {
     const arr = [...filmResults];
@@ -3909,7 +3911,8 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
     setFilmType(p.type || "wins");
     setFilmDecadeFrom(p.decadeFrom || "");
     setFilmDecadeTo(p.decadeTo || "");
-    setFilmSpecial(p.mode === "AND_PICTURE_ACTING" ? "AND_PICTURE_ACTING" : null);
+    setFilmMinNoms(p.minNoms || 0);
+    setFilmSpecial(p.mode === "AND_PICTURE_ACTING" ? "AND_PICTURE_ACTING" : p.special || null);
     if (p.sortBy === "noms") setFilmSort({ col: "noms", dir: "desc" });
     else setFilmSort({ col: "wins", dir: "desc" });
   };
@@ -3924,12 +3927,12 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
     setPersonSort({ col: p.sortBy === "noms" ? "noms" : "wins", dir: "desc" });
   };
 
-  const resetFilm = () => { setFilmCats([]); setFilmMode("AND"); setFilmType("wins"); setFilmDecadeFrom(""); setFilmDecadeTo(""); setFilmSpecial(null); };
+  const resetFilm = () => { setFilmCats([]); setFilmMode("AND"); setFilmType("wins"); setFilmDecadeFrom(""); setFilmDecadeTo(""); setFilmSpecial(null); setFilmMinNoms(0); };
   const resetPerson = () => { setPersonQuery(""); setPersonCats([]); setPersonType("wins"); setPersonDecadeFrom(""); setPersonDecadeTo(""); setPersonMinWins(0); setPersonMode("ANY"); };
 
   const toggleCat = (cat, list, setter) => setter(list.includes(cat) ? list.filter(c => c !== cat) : [...list, cat]);
 
-  const hasFilmFilters = filmCats.length > 0 || filmDecadeFrom || filmDecadeTo;
+  const hasFilmFilters = filmCats.length > 0 || filmDecadeFrom || filmDecadeTo || filmMinNoms > 0 || filmSpecial === "NO_WINS";
   const hasPersonFilters = personQuery.trim() || personCats.length > 0 || personDecadeFrom || personDecadeTo;
 
   return (
