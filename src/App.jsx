@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -3730,23 +3730,6 @@ const PEOPLE_PRESETS = [
   { label: "Won acting + directing", cats: ["Directing",...ACTING_CATS], mode: "AND_ANY", type: "wins" },
 ];
 
-class ExplorerErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { error: null }; }
-  static getDerivedStateFromError(e) { return { error: e }; }
-  render() {
-    if (this.state.error) {
-      return (
-        <div style={{ minHeight: "100vh", background: "#0a0c14", color: "#e06070", padding: "3rem", fontFamily: "monospace" }}>
-          <h2 style={{ color: "#c9a84c" }}>Oscar Explorer — render error</h2>
-          <pre style={{ whiteSpace: "pre-wrap", fontSize: "0.85rem" }}>{this.state.error?.toString()}{"\n\n"}{this.state.error?.stack}</pre>
-          <button onClick={this.props.onGoHome} style={{ marginTop: "2rem", padding: "0.5rem 1rem", background: "none", border: "1px solid #c9a84c", color: "#c9a84c", cursor: "pointer", fontFamily: "monospace" }}>← Home</button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
 function OscarExplorerScreen({ onGoHome, onGoHistory }) {
   const [tab, setTab] = useState("films");
   const [allData, setAllData] = useState(null);
@@ -3940,7 +3923,7 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
   const hasPersonFilters = personQuery.trim() || personCats.length > 0 || personDecadeFrom || personDecadeTo;
 
   return (
-    <div className="explorer-screen" style={{ minHeight: "100vh", background: "var(--bg, #0a0c14)", color: "var(--text, #e8e6e0)" }}>
+    <div className="explorer-screen">
       <div className="explorer-header">
         <button className="explorer-back-btn" onClick={onGoHome}>← Home</button>
         <div className="explorer-title-block">
@@ -3955,9 +3938,9 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
       </div>
 
       {loading ? (
-        <div style={{ padding: "3rem 2.5rem", color: "#c9a84c", fontFamily: "monospace", fontSize: "0.9rem" }}>Loading Oscar history…</div>
+        <div className="explorer-loading">Loading Oscar history…</div>
       ) : loadError ? (
-        <div style={{ padding: "3rem 2.5rem", color: "#e06070", fontFamily: "monospace", fontSize: "0.85rem" }}>Error loading data: {loadError}</div>
+        <div className="explorer-loading" style={{ color: "var(--crimson)" }}>Error: {loadError}</div>
       ) : tab === "films" ? (
         <div className="explorer-body">
           <div className="explorer-presets">
@@ -5687,12 +5670,10 @@ export default function App() {
   if (screen === "admin") return <AdminPanel onBack={() => { setScreen("home"); loadAllShows(); }} />;
   if (screen === "history") return <HistoryScreen user={user} onGoHome={() => setScreen("home")} />;
   if (screen === "explorer") return (
-    <ExplorerErrorBoundary onGoHome={() => setScreen("home")}>
-      <OscarExplorerScreen
-        onGoHome={() => setScreen("home")}
-        onGoHistory={(ceremony) => { setScreen("history"); }}
-      />
-    </ExplorerErrorBoundary>
+    <OscarExplorerScreen
+      onGoHome={() => setScreen("home")}
+      onGoHistory={(ceremony) => { setScreen("history"); }}
+    />
   );
   if (screen === "profile" && activeShow) {
     return <ShowApp show={activeShow} user={user} allShows={allShows} defaultView="profile" onGoHome={() => { setScreen("home"); setActiveShow(null); }} pendingLeagueCode={pendingLeagueCode} onClearLeagueCode={() => { setPendingLeagueCode(null); sessionStorage.removeItem("pendingLeagueCode"); }} />;
