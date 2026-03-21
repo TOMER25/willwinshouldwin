@@ -468,7 +468,7 @@ function OnboardingModal({ onDismiss }) {
   );
 }
 
-function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin, onGoHistory, allShows }) {
+function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin, onGoHistory, onGoExplorer, allShows }) {
   return (
     <div className="home-screen">
       <div className="home-header">
@@ -531,6 +531,15 @@ function HomeScreen({ onSelectShow, user, onGoProfile, onGoAdmin, onGoHistory, a
               <p className="show-org">1927 — Present</p>
               <p className="show-cats">Best Picture · Director · Acting · Screenplay · and more</p>
               <div className="show-cta show-cta--crimson">Who should have won? →</div>
+            </button>
+            <button className="show-card show-card-explorer" onClick={onGoExplorer}>
+              <div className="show-card-top">
+                <span className="show-badge badge-explorer">98 Years of Data</span>
+              </div>
+              <h3 className="show-name">Oscar Explorer</h3>
+              <p className="show-org">Films · People · Categories</p>
+              <p className="show-cats">Filter by category, decade, wins, and nominations</p>
+              <div className="show-cta show-cta--gold">Search the history →</div>
             </button>
           </div>
         </div>
@@ -3608,6 +3617,458 @@ const CEREMONY_LIST = (() => {
   return list;
 })();
 
+// ============================================================
+// OSCAR EXPLORER SCREEN
+// ============================================================
+
+const EXPLORER_CATEGORIES = [
+  "Best Picture",
+  "Best Director",
+  "Best Actor",
+  "Best Actress",
+  "Best Supporting Actor",
+  "Best Supporting Actress",
+  "Best Adapted Screenplay",
+  "Best Original Screenplay",
+  "Best Cinematography",
+  "Best Film Editing",
+  "Best Original Score",
+  "Best Visual Effects",
+  "Best Costume Design",
+  "Best Production Design",
+  "Best Makeup and Hairstyling",
+  "Best Sound",
+  "Best Documentary Feature",
+  "Best International Feature Film",
+  "Best Animated Feature",
+];
+
+const EXPLORER_DECADES = ["1920s","1930s","1940s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s"];
+
+const decadeToRange = (d) => {
+  const start = parseInt(d);
+  return [start, start + 9];
+};
+
+const FILM_PRESETS = [
+  { label: "Won Picture + Editing", filters: { cats: ["Best Picture","Best Film Editing"], mode: "AND", type: "wins" } },
+  { label: "Won Picture + Director", filters: { cats: ["Best Picture","Best Director"], mode: "AND", type: "wins" } },
+  { label: "Won Picture, no acting", filters: { cats: ["Best Picture"], mode: "AND", type: "wins", excludeCats: ["Best Actor","Best Actress","Best Supporting Actor","Best Supporting Actress"] } },
+  { label: "Won Picture alone", filters: { cats: ["Best Picture"], mode: "AND", type: "wins", maxWins: 1 } },
+  { label: "Won Picture + Screenplay", filters: { cats: ["Best Picture","Best Adapted Screenplay","Best Original Screenplay"], mode: "OR_PICTURE_PLUS", type: "wins" } },
+];
+
+const PEOPLE_PRESETS = [
+  { label: "Most 1980s Cinematography wins", filters: { cats: ["Best Cinematography"], type: "wins", decadeFrom: "1980s", decadeTo: "1980s" } },
+  { label: "Multiple Directing wins", filters: { cats: ["Best Director"], type: "wins", minWins: 2 } },
+  { label: "Won Acting + Directing", filters: { cats: ["Best Director","Best Actor","Best Actress"], mode: "AND_ANY", type: "wins" } },
+  { label: "Most wins overall", filters: { cats: [], type: "wins", sortBy: "wins" } },
+  { label: "Most nominations overall", filters: { cats: [], type: "nominations", sortBy: "noms" } },
+];
+
+function OscarExplorerScreen({ onGoHome, onGoHistory }) {
+  const [tab, setTab] = useState("films");
+  const [allData, setAllData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Film tab state
+  const [filmCats, setFilmCats] = useState([]);
+  const [filmMode, setFilmMode] = useState("AND");
+  const [filmType, setFilmType] = useState("wins");
+  const [filmDecadeFrom, setFilmDecadeFrom] = useState("");
+  const [filmDecadeTo, setFilmDecadeTo] = useState("");
+  const [filmSort, setFilmSort] = useState({ col: "year", dir: "desc" });
+
+  // People tab state
+  const [personQuery, setPersonQuery] = useState("");
+  const [personCats, setPersonCats] = useState([]);
+  const [personType, setPersonType] = useState("wins");
+  const [personDecadeFrom, setPersonDecadeFrom] = useState("");
+  const [personDecadeTo, setPersonDecadeTo] = useState("");
+  const [personSort, setPersonSort] = useState({ col: "wins", dir: "desc" });
+
+  useEffect(() => {
+    const loadAll = async () => {
+      setLoading(true);
+      const { data } = await supabase
+        .from("historical_ceremonies")
+        .select("ceremony, category, nominee_index, winner, film, name, year");
+      setAllData(data || []);
+      setLoading(false);
+    };
+    loadAll();
+  }, []);
+
+  // Build film index
+  const filmIndex = useMemo(() => {
+    if (!allData) return [];
+    const map = {};
+    allData.forEach(row => {
+      const key = `${row.film}||${row.ceremony}`;
+      if (!map[key]) map[key] = { title: row.film, ceremony: row.ceremony, year: row.year, wins: new Set(), noms: new Set() };
+      map[key].noms.add(row.category);
+      if (row.winner) map[key].wins.add(row.category);
+    });
+    return Object.values(map).filter(f => f.title);
+  }, [allData]);
+
+  // Build person index
+  const personIndex = useMemo(() => {
+    if (!allData) return [];
+    const map = {};
+    allData.forEach(row => {
+      const names = row.name ? row.name.split("|") : [];
+      names.forEach(rawName => {
+        const name = rawName.trim();
+        if (!name || name === row.film) return;
+        if (!map[name]) map[name] = { name, wins: [], noms: [] };
+        const entry = { category: row.category, film: row.film, year: row.year, ceremony: row.ceremony };
+        map[name].noms.push(entry);
+        if (row.winner) map[name].wins.push(entry);
+      });
+    });
+    return Object.values(map);
+  }, [allData]);
+
+  // Filter helpers
+  const yearInDecadeRange = (year, from, to) => {
+    if (!year) return true;
+    const y = parseInt(year);
+    if (from) { const [s] = decadeToRange(from); if (y < s) return false; }
+    if (to)   { const [,e] = decadeToRange(to);  if (y > e) return false; }
+    return true;
+  };
+
+  // Film results
+  const filmResults = useMemo(() => {
+    if (!filmCats.length && !filmDecadeFrom && !filmDecadeTo) return [];
+    return filmIndex.filter(f => {
+      if (!yearInDecadeRange(f.year, filmDecadeFrom, filmDecadeTo)) return false;
+      const pool = filmType === "wins" ? f.wins : f.noms;
+      if (!filmCats.length) return true;
+      if (filmMode === "AND") return filmCats.every(c => pool.has(c));
+      return filmCats.some(c => pool.has(c));
+    });
+  }, [filmIndex, filmCats, filmMode, filmType, filmDecadeFrom, filmDecadeTo]);
+
+  const sortedFilmResults = useMemo(() => {
+    const arr = [...filmResults];
+    arr.sort((a, b) => {
+      let av, bv;
+      if (filmSort.col === "year") { av = a.year || 0; bv = b.year || 0; }
+      else if (filmSort.col === "wins") { av = a.wins.size; bv = b.wins.size; }
+      else if (filmSort.col === "noms") { av = a.noms.size; bv = b.noms.size; }
+      else { av = a.title.toLowerCase(); bv = b.title.toLowerCase(); return filmSort.dir === "asc" ? (av < bv ? -1 : 1) : (av > bv ? -1 : 1); }
+      return filmSort.dir === "asc" ? av - bv : bv - av;
+    });
+    return arr;
+  }, [filmResults, filmSort]);
+
+  // Person results
+  const personResults = useMemo(() => {
+    let people = personIndex;
+    if (personQuery.trim()) {
+      const q = personQuery.toLowerCase();
+      people = people.filter(p => p.name.toLowerCase().includes(q));
+    }
+    people = people.map(p => {
+      const pool = personType === "wins" ? p.wins : p.noms;
+      const filtered = pool.filter(e => {
+        if (!yearInDecadeRange(e.year, personDecadeFrom, personDecadeTo)) return false;
+        if (personCats.length && !personCats.includes(e.category)) return false;
+        return true;
+      });
+      const allWins = p.wins.filter(e => yearInDecadeRange(e.year, personDecadeFrom, personDecadeTo) && (!personCats.length || personCats.includes(e.category)));
+      const allNoms = p.noms.filter(e => yearInDecadeRange(e.year, personDecadeFrom, personDecadeTo) && (!personCats.length || personCats.includes(e.category)));
+      return { ...p, filteredCount: filtered.length, filteredWins: allWins.length, filteredNoms: allNoms.length };
+    }).filter(p => p.filteredCount > 0 || personQuery.trim());
+    return people;
+  }, [personIndex, personQuery, personCats, personType, personDecadeFrom, personDecadeTo]);
+
+  const sortedPersonResults = useMemo(() => {
+    const arr = [...personResults];
+    arr.sort((a, b) => {
+      if (personSort.col === "wins") return personSort.dir === "asc" ? a.filteredWins - b.filteredWins : b.filteredWins - a.filteredWins;
+      if (personSort.col === "noms") return personSort.dir === "asc" ? a.filteredNoms - b.filteredNoms : b.filteredNoms - a.filteredNoms;
+      const av = a.name.toLowerCase(), bv = b.name.toLowerCase();
+      return personSort.dir === "asc" ? (av < bv ? -1 : 1) : (av > bv ? -1 : 1);
+    });
+    return arr.slice(0, 200);
+  }, [personResults, personSort]);
+
+  const toggleSort = (col, setter) => setter(prev => ({ col, dir: prev.col === col ? (prev.dir === "asc" ? "desc" : "asc") : "desc" }));
+  const SortArrow = ({ col, sort }) => <span className="explorer-sort-arrow">{sort.col === col ? (sort.dir === "desc" ? " ↓" : " ↑") : " ↕"}</span>;
+
+  const applyFilmPreset = (p) => {
+    setFilmCats(p.filters.cats || []);
+    setFilmMode(p.filters.mode === "AND" ? "AND" : "OR");
+    setFilmType(p.filters.type || "wins");
+    setFilmDecadeFrom(p.filters.decadeFrom || "");
+    setFilmDecadeTo(p.filters.decadeTo || "");
+  };
+
+  const applyPersonPreset = (p) => {
+    setPersonCats(p.filters.cats || []);
+    setPersonType(p.filters.type || "wins");
+    setPersonDecadeFrom(p.filters.decadeFrom || "");
+    setPersonDecadeTo(p.filters.decadeTo || "");
+    setPersonSort({ col: p.filters.sortBy === "noms" ? "noms" : "wins", dir: "desc" });
+  };
+
+  const resetFilm = () => { setFilmCats([]); setFilmMode("AND"); setFilmType("wins"); setFilmDecadeFrom(""); setFilmDecadeTo(""); };
+  const resetPerson = () => { setPersonQuery(""); setPersonCats([]); setPersonType("wins"); setPersonDecadeFrom(""); setPersonDecadeTo(""); };
+
+  const toggleCat = (cat, list, setter) => setter(list.includes(cat) ? list.filter(c => c !== cat) : [...list, cat]);
+
+  const hasFilmFilters = filmCats.length > 0 || filmDecadeFrom || filmDecadeTo;
+  const hasPersonFilters = personQuery.trim() || personCats.length > 0 || personDecadeFrom || personDecadeTo;
+
+  // Category short labels for the results table columns
+  const CAT_SHORT = {
+    "Best Picture": "Picture", "Best Director": "Director",
+    "Best Actor": "Actor", "Best Actress": "Actress",
+    "Best Supporting Actor": "Sup. Actor", "Best Supporting Actress": "Sup. Actress",
+    "Best Adapted Screenplay": "Adapt. Script", "Best Original Screenplay": "Orig. Script",
+    "Best Cinematography": "Cinematog.", "Best Film Editing": "Editing",
+    "Best Original Score": "Score", "Best Visual Effects": "VFX",
+    "Best Costume Design": "Costume", "Best Production Design": "Prod. Design",
+    "Best Makeup and Hairstyling": "Makeup", "Best Sound": "Sound",
+    "Best Documentary Feature": "Documentary", "Best International Feature Film": "Intl. Film",
+    "Best Animated Feature": "Animated",
+  };
+
+  const filmCatsForTable = filmCats.length ? filmCats : [];
+
+  return (
+    <div className="explorer-screen">
+      <div className="explorer-header">
+        <button className="explorer-back-btn" onClick={onGoHome}>← Home</button>
+        <div className="explorer-title-block">
+          <h1 className="explorer-title">Oscar <span style={{ color: "var(--gold)" }}>Explorer</span></h1>
+          <p className="explorer-subtitle">Search 98 years of Academy Award history</p>
+        </div>
+      </div>
+
+      <div className="explorer-tabs">
+        <button className={`explorer-tab ${tab === "films" ? "active" : ""}`} onClick={() => setTab("films")}>Films</button>
+        <button className={`explorer-tab ${tab === "people" ? "active" : ""}`} onClick={() => setTab("people")}>People</button>
+      </div>
+
+      {loading ? (
+        <div className="explorer-loading">Loading Oscar history…</div>
+      ) : tab === "films" ? (
+        <div className="explorer-body">
+          {/* Presets */}
+          <div className="explorer-presets">
+            <span className="explorer-presets-label">Try:</span>
+            {FILM_PRESETS.map(p => (
+              <button key={p.label} className="explorer-preset-chip" onClick={() => applyFilmPreset(p)}>{p.label}</button>
+            ))}
+          </div>
+
+          {/* Filters */}
+          <div className="explorer-filters">
+            <div className="explorer-filter-row">
+              <div className="explorer-filter-group">
+                <label className="explorer-filter-label">Match</label>
+                <div className="explorer-toggle-group">
+                  <button className={`explorer-toggle-btn ${filmMode === "AND" ? "active" : ""}`} onClick={() => setFilmMode("AND")}>All selected</button>
+                  <button className={`explorer-toggle-btn ${filmMode === "OR" ? "active" : ""}`} onClick={() => setFilmMode("OR")}>Any selected</button>
+                </div>
+              </div>
+              <div className="explorer-filter-group">
+                <label className="explorer-filter-label">Type</label>
+                <div className="explorer-toggle-group">
+                  <button className={`explorer-toggle-btn ${filmType === "wins" ? "active" : ""}`} onClick={() => setFilmType("wins")}>Wins</button>
+                  <button className={`explorer-toggle-btn ${filmType === "nominations" ? "active" : ""}`} onClick={() => setFilmType("nominations")}>Nominations</button>
+                </div>
+              </div>
+              <div className="explorer-filter-group">
+                <label className="explorer-filter-label">Decade</label>
+                <div className="explorer-decade-row">
+                  <select className="explorer-select" value={filmDecadeFrom} onChange={e => setFilmDecadeFrom(e.target.value)}>
+                    <option value="">From</option>
+                    {EXPLORER_DECADES.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                  <span className="explorer-decade-sep">–</span>
+                  <select className="explorer-select" value={filmDecadeTo} onChange={e => setFilmDecadeTo(e.target.value)}>
+                    <option value="">To</option>
+                    {EXPLORER_DECADES.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+              </div>
+              {hasFilmFilters && <button className="explorer-reset-btn" onClick={resetFilm}>Reset</button>}
+            </div>
+
+            <div className="explorer-cat-chips">
+              {EXPLORER_CATEGORIES.map(cat => (
+                <button
+                  key={cat}
+                  className={`explorer-cat-chip ${filmCats.includes(cat) ? "active" : ""}`}
+                  onClick={() => toggleCat(cat, filmCats, setFilmCats)}
+                >
+                  {CAT_SHORT[cat] || cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Results */}
+          {!hasFilmFilters ? (
+            <div className="explorer-empty">
+              <p className="explorer-empty-text">Select categories or a decade above, or tap a preset query to get started.</p>
+            </div>
+          ) : sortedFilmResults.length === 0 ? (
+            <div className="explorer-empty">
+              <p className="explorer-empty-text">No films match these filters.</p>
+              <button className="explorer-reset-btn" onClick={resetFilm}>Reset filters</button>
+            </div>
+          ) : (
+            <div className="explorer-results">
+              <p className="explorer-results-count">{sortedFilmResults.length} film{sortedFilmResults.length !== 1 ? "s" : ""}</p>
+              <div className="explorer-table-wrap">
+                <table className="explorer-table">
+                  <thead>
+                    <tr>
+                      <th className="explorer-th" onClick={() => toggleSort("title", setFilmSort)}>Film <SortArrow col="title" sort={filmSort} /></th>
+                      <th className="explorer-th" onClick={() => toggleSort("year", setFilmSort)}>Year <SortArrow col="year" sort={filmSort} /></th>
+                      <th className="explorer-th" onClick={() => toggleSort("wins", setFilmSort)}>Wins <SortArrow col="wins" sort={filmSort} /></th>
+                      <th className="explorer-th" onClick={() => toggleSort("noms", setFilmSort)}>Noms <SortArrow col="noms" sort={filmSort} /></th>
+                      {filmCatsForTable.map(c => <th key={c} className="explorer-th explorer-th-cat">{CAT_SHORT[c] || c}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedFilmResults.map((f, i) => (
+                      <tr key={i} className="explorer-tr" onClick={() => onGoHistory(f.ceremony)}>
+                        <td className="explorer-td explorer-td-title">{f.title}</td>
+                        <td className="explorer-td">{f.year}</td>
+                        <td className="explorer-td explorer-td-num" style={{ color: "var(--gold)" }}>{f.wins.size}</td>
+                        <td className="explorer-td explorer-td-num">{f.noms.size}</td>
+                        {filmCatsForTable.map(c => (
+                          <td key={c} className="explorer-td explorer-td-check">
+                            {f.wins.has(c) ? <span className="explorer-check-win">★</span> : f.noms.has(c) ? <span className="explorer-check-nom">◦</span> : <span className="explorer-check-no">–</span>}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="explorer-body">
+          {/* Presets */}
+          <div className="explorer-presets">
+            <span className="explorer-presets-label">Try:</span>
+            {PEOPLE_PRESETS.map(p => (
+              <button key={p.label} className="explorer-preset-chip" onClick={() => applyPersonPreset(p)}>{p.label}</button>
+            ))}
+          </div>
+
+          {/* Filters */}
+          <div className="explorer-filters">
+            <div className="explorer-filter-row">
+              <div className="explorer-filter-group explorer-filter-group--search">
+                <label className="explorer-filter-label">Name</label>
+                <input
+                  className="explorer-search-input"
+                  type="text"
+                  placeholder="Search by name…"
+                  value={personQuery}
+                  onChange={e => setPersonQuery(e.target.value)}
+                />
+              </div>
+              <div className="explorer-filter-group">
+                <label className="explorer-filter-label">Type</label>
+                <div className="explorer-toggle-group">
+                  <button className={`explorer-toggle-btn ${personType === "wins" ? "active" : ""}`} onClick={() => setPersonType("wins")}>Wins</button>
+                  <button className={`explorer-toggle-btn ${personType === "nominations" ? "active" : ""}`} onClick={() => setPersonType("nominations")}>Nominations</button>
+                </div>
+              </div>
+              <div className="explorer-filter-group">
+                <label className="explorer-filter-label">Decade</label>
+                <div className="explorer-decade-row">
+                  <select className="explorer-select" value={personDecadeFrom} onChange={e => setPersonDecadeFrom(e.target.value)}>
+                    <option value="">From</option>
+                    {EXPLORER_DECADES.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                  <span className="explorer-decade-sep">–</span>
+                  <select className="explorer-select" value={personDecadeTo} onChange={e => setPersonDecadeTo(e.target.value)}>
+                    <option value="">To</option>
+                    {EXPLORER_DECADES.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+              </div>
+              {hasPersonFilters && <button className="explorer-reset-btn" onClick={resetPerson}>Reset</button>}
+            </div>
+
+            <div className="explorer-cat-chips">
+              {EXPLORER_CATEGORIES.map(cat => (
+                <button
+                  key={cat}
+                  className={`explorer-cat-chip ${personCats.includes(cat) ? "active" : ""}`}
+                  onClick={() => toggleCat(cat, personCats, setPersonCats)}
+                >
+                  {CAT_SHORT[cat] || cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Results */}
+          {!hasPersonFilters ? (
+            <div className="explorer-empty">
+              <p className="explorer-empty-text">Search by name, filter by category or decade, or tap a preset query.</p>
+            </div>
+          ) : sortedPersonResults.length === 0 ? (
+            <div className="explorer-empty">
+              <p className="explorer-empty-text">No people match these filters.</p>
+              <button className="explorer-reset-btn" onClick={resetPerson}>Reset filters</button>
+            </div>
+          ) : (
+            <div className="explorer-results">
+              <p className="explorer-results-count">{sortedPersonResults.length} result{sortedPersonResults.length !== 1 ? "s" : ""}{sortedPersonResults.length === 200 ? " (showing top 200)" : ""}</p>
+              <div className="explorer-table-wrap">
+                <table className="explorer-table">
+                  <thead>
+                    <tr>
+                      <th className="explorer-th" onClick={() => toggleSort("name", setPersonSort)}>Name <SortArrow col="name" sort={personSort} /></th>
+                      <th className="explorer-th" onClick={() => toggleSort("wins", setPersonSort)}>Wins <SortArrow col="wins" sort={personSort} /></th>
+                      <th className="explorer-th" onClick={() => toggleSort("noms", setPersonSort)}>Noms <SortArrow col="noms" sort={personSort} /></th>
+                      <th className="explorer-th">Categories</th>
+                      <th className="explorer-th">Years</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedPersonResults.map((p, i) => {
+                      const winCats = [...new Set(p.wins.filter(e => yearInDecadeRange(e.year, personDecadeFrom, personDecadeTo) && (!personCats.length || personCats.includes(e.category))).map(e => CAT_SHORT[e.category] || e.category))];
+                      const allEntries = (personType === "wins" ? p.wins : p.noms).filter(e => yearInDecadeRange(e.year, personDecadeFrom, personDecadeTo) && (!personCats.length || personCats.includes(e.category)));
+                      const years = allEntries.map(e => e.year).filter(Boolean);
+                      const minY = years.length ? Math.min(...years) : null;
+                      const maxY = years.length ? Math.max(...years) : null;
+                      return (
+                        <tr key={i} className="explorer-tr">
+                          <td className="explorer-td explorer-td-title">{p.name}</td>
+                          <td className="explorer-td explorer-td-num" style={{ color: "var(--gold)" }}>{p.filteredWins}</td>
+                          <td className="explorer-td explorer-td-num">{p.filteredNoms}</td>
+                          <td className="explorer-td explorer-td-cats">{winCats.slice(0, 3).join(", ")}{winCats.length > 3 ? ` +${winCats.length - 3}` : ""}</td>
+                          <td className="explorer-td explorer-td-years">{minY && maxY ? (minY === maxY ? minY : `${minY}–${maxY}`) : "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function HistoryScreen({ user, onGoHome }) {
   const [selected, setSelected]       = useState(null);
   const [nominees, setNominees]       = useState([]);
@@ -5140,6 +5601,12 @@ export default function App() {
   if (!user) return <AuthModal onAuth={setUser} />;
   if (screen === "admin") return <AdminPanel onBack={() => { setScreen("home"); loadAllShows(); }} />;
   if (screen === "history") return <HistoryScreen user={user} onGoHome={() => setScreen("home")} />;
+  if (screen === "explorer") return (
+    <OscarExplorerScreen
+      onGoHome={() => setScreen("home")}
+      onGoHistory={(ceremony) => { setScreen("history"); }}
+    />
+  );
   if (screen === "profile" && activeShow) {
     return <ShowApp show={activeShow} user={user} allShows={allShows} defaultView="profile" onGoHome={() => { setScreen("home"); setActiveShow(null); }} pendingLeagueCode={pendingLeagueCode} onClearLeagueCode={() => { setPendingLeagueCode(null); sessionStorage.removeItem("pendingLeagueCode"); }} />;
   }
@@ -5160,6 +5627,7 @@ export default function App() {
         onGoProfile={() => { const first = allShows[0]; if (first) { setActiveShow(first); setScreen("profile"); } }}
         onGoAdmin={() => setScreen("admin")}
         onGoHistory={() => setScreen("history")}
+        onGoExplorer={() => setScreen("explorer")}
         allShows={allShows}
       />
       {showOnboarding && <OnboardingModal onDismiss={handleDismissOnboarding} />}
