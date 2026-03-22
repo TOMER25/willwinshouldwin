@@ -3674,6 +3674,34 @@ const CAT_SHORT = {
   "Documentary Short Film":       "Doc. Short",
 };
 
+// Maps every raw DLu category name → canonical name used in EXPLORER_CATEGORIES.
+// Keeps raw data intact in Supabase; normalization happens in the frontend.
+const CATEGORY_NORMALIZE = {
+  "Best Picture":"Best Picture","BEST PICTURE":"Best Picture","BEST MOTION PICTURE":"Best Picture","OUTSTANDING MOTION PICTURE":"Best Picture","OUTSTANDING PICTURE":"Best Picture","OUTSTANDING PRODUCTION":"Best Picture","UNIQUE AND ARTISTIC PICTURE":"Best Picture",
+  "Directing":"Directing","DIRECTING":"Directing","DIRECTING (Comedy Picture)":"Directing","DIRECTING (Dramatic Picture)":"Directing",
+  "Actor in a Leading Role":"Actor in a Leading Role","ACTOR":"Actor in a Leading Role","ACTOR IN A LEADING ROLE":"Actor in a Leading Role",
+  "Actress in a Leading Role":"Actress in a Leading Role","ACTRESS":"Actress in a Leading Role","ACTRESS IN A LEADING ROLE":"Actress in a Leading Role",
+  "Actor in a Supporting Role":"Actor in a Supporting Role","ACTOR IN A SUPPORTING ROLE":"Actor in a Supporting Role",
+  "Actress in a Supporting Role":"Actress in a Supporting Role","ACTRESS IN A SUPPORTING ROLE":"Actress in a Supporting Role",
+  "Writing (Original Screenplay)":"Writing (Original Screenplay)","WRITING (Original Screenplay)":"Writing (Original Screenplay)","WRITING (Screenplay--Original)":"Writing (Original Screenplay)","WRITING (Screenplay Written Directly for the Screen)":"Writing (Original Screenplay)","WRITING (Screenplay Written Directly for the Screen--based on factual material or on story material not previously published or produced)":"Writing (Original Screenplay)","WRITING (Story and Screenplay)":"Writing (Original Screenplay)","WRITING (Story and Screenplay--written directly for the screen)":"Writing (Original Screenplay)","WRITING (Story and Screenplay--based on material not previously published or produced)":"Writing (Original Screenplay)","WRITING (Story and Screenplay--based on factual material or material not previously published or produced)":"Writing (Original Screenplay)","WRITING (Motion Picture Story)":"Writing (Original Screenplay)","WRITING (Original Story)":"Writing (Original Screenplay)","WRITING (Original Motion Picture Story)":"Writing (Original Screenplay)","WRITING":"Writing (Original Screenplay)","WRITING (Title Writing)":"Writing (Original Screenplay)",
+  "Writing (Adapted Screenplay)":"Writing (Adapted Screenplay)","WRITING (Adapted Screenplay)":"Writing (Adapted Screenplay)","WRITING (Adaptation)":"Writing (Adapted Screenplay)","WRITING (Screenplay--Adapted)":"Writing (Adapted Screenplay)","WRITING (Screenplay Adapted from Other Material)":"Writing (Adapted Screenplay)","WRITING (Screenplay Based on Material from Another Medium)":"Writing (Adapted Screenplay)","WRITING (Screenplay Based on Material Previously Produced or Published)":"Writing (Adapted Screenplay)","WRITING (Screenplay--based on material from another medium)":"Writing (Adapted Screenplay)","WRITING (Screenplay)":"Writing (Adapted Screenplay)",
+  "Cinematography":"Cinematography","CINEMATOGRAPHY":"Cinematography","CINEMATOGRAPHY (Black-and-White)":"Cinematography","CINEMATOGRAPHY (Color)":"Cinematography",
+  "Film Editing":"Film Editing","FILM EDITING":"Film Editing",
+  "Music (Original Score)":"Music (Original Score)","MUSIC (Original Score)":"Music (Original Score)","MUSIC (Original Music Score)":"Music (Original Score)","MUSIC (Original Dramatic Score)":"Music (Original Score)","MUSIC (Music Score of a Dramatic or Comedy Picture)":"Music (Original Score)","MUSIC (Music Score of a Dramatic Picture)":"Music (Original Score)","MUSIC (Music Score--substantially original)":"Music (Original Score)","MUSIC (Original Score--for a motion picture [not a musical])":"Music (Original Score)","MUSIC (Scoring)":"Music (Original Score)","MUSIC (Scoring of a Musical Picture)":"Music (Original Score)","MUSIC (Score of a Musical Picture--original or adaptation)":"Music (Original Score)","MUSIC (Scoring: Original Song Score and Adaptation -or- Scoring: Adaptation)":"Music (Original Score)","MUSIC (Scoring: Adaptation and Original Song Score)":"Music (Original Score)","MUSIC (Scoring of Music--adaptation or treatment)":"Music (Original Score)","MUSIC (Adaptation Score)":"Music (Original Score)","MUSIC (Original Song Score)":"Music (Original Score)","MUSIC (Original Musical or Comedy Score)":"Music (Original Score)","MUSIC (Original Song Score and Its Adaptation -or- Adaptation Score)":"Music (Original Score)","MUSIC (Original Song Score and Its Adaptation or Adaptation Score)":"Music (Original Score)","MUSIC (Original Song Score or Adaptation Score)":"Music (Original Score)",
+  "Music (Original Song)":"Music (Original Song)","MUSIC (Original Song)":"Music (Original Song)","MUSIC (Song)":"Music (Original Song)","MUSIC (Song--Original for the Picture)":"Music (Original Song)",
+  "Production Design":"Production Design","PRODUCTION DESIGN":"Production Design","ART DIRECTION":"Production Design","ART DIRECTION (Black-and-White)":"Production Design","ART DIRECTION (Color)":"Production Design",
+  "Costume Design":"Costume Design","COSTUME DESIGN":"Costume Design","COSTUME DESIGN (Black-and-White)":"Costume Design","COSTUME DESIGN (Color)":"Costume Design",
+  "Makeup and Hairstyling":"Makeup and Hairstyling","MAKEUP":"Makeup and Hairstyling","MAKEUP AND HAIRSTYLING":"Makeup and Hairstyling",
+  "Sound":"Sound","SOUND":"Sound","SOUND EDITING":"Sound","SOUND MIXING":"Sound","SOUND RECORDING":"Sound","SOUND EFFECTS":"Sound","SOUND EFFECTS EDITING":"Sound",
+  "Visual Effects":"Visual Effects","VISUAL EFFECTS":"Visual Effects","SPECIAL EFFECTS":"Visual Effects","SPECIAL VISUAL EFFECTS":"Visual Effects","ENGINEERING EFFECTS":"Visual Effects","SPECIAL ACHIEVEMENT AWARD (Visual Effects)":"Visual Effects","SPECIAL ACHIEVEMENT AWARD (Sound Effects)":"Visual Effects","SPECIAL ACHIEVEMENT AWARD (Sound Effects Editing)":"Visual Effects","SPECIAL ACHIEVEMENT AWARD (Sound Editing)":"Visual Effects",
+  "Animated Feature Film":"Animated Feature Film","ANIMATED FEATURE FILM":"Animated Feature Film",
+  "International Feature Film":"International Feature Film","INTERNATIONAL FEATURE FILM":"International Feature Film","FOREIGN LANGUAGE FILM":"International Feature Film","HONORARY FOREIGN LANGUAGE FILM AWARD":"International Feature Film","SPECIAL FOREIGN LANGUAGE FILM AWARD":"International Feature Film",
+  "Documentary Feature Film":"Documentary Feature Film","DOCUMENTARY FEATURE FILM":"Documentary Feature Film","DOCUMENTARY":"Documentary Feature Film","DOCUMENTARY (Feature)":"Documentary Feature Film",
+  "Animated Short Film":"Animated Short Film","ANIMATED SHORT FILM":"Animated Short Film","SHORT FILM (Animated)":"Animated Short Film","SHORT SUBJECT (Animated)":"Animated Short Film","SHORT SUBJECT (Cartoon)":"Animated Short Film",
+  "Live Action Short Film":"Live Action Short Film","LIVE ACTION SHORT FILM":"Live Action Short Film","SHORT FILM (Live Action)":"Live Action Short Film","SHORT FILM (Dramatic Live Action)":"Live Action Short Film","SHORT SUBJECT (Live Action)":"Live Action Short Film","SHORT SUBJECT (One-reel)":"Live Action Short Film","SHORT SUBJECT (Two-reel)":"Live Action Short Film","SHORT SUBJECT (Color)":"Live Action Short Film","SHORT SUBJECT (Comedy)":"Live Action Short Film","SHORT SUBJECT (Novelty)":"Live Action Short Film",
+  "Documentary Short Film":"Documentary Short Film","DOCUMENTARY SHORT FILM":"Documentary Short Film","DOCUMENTARY (Short Subject)":"Documentary Short Film",
+};
+
 const EXPLORER_DECADES = ["1920s","1930s","1940s","1950s","1960s","1970s","1980s","1990s","2000s","2010s","2020s"];
 
 const decadeToRange = (d) => {
@@ -3785,14 +3813,16 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
     allData.forEach(row => {
       const film = row.film?.split("|")[0]?.trim();
       if (!film) return;
+      const cat = CATEGORY_NORMALIZE[row.category] || null;
+      if (!cat) return; // skip non-competitive categories not in our map
       const key = `${film.toLowerCase()}||${row.ceremony}`;
       if (!map[key]) {
         const yearStr = CEREMONY_YEAR_MAP[row.ceremony] || "";
         map[key] = { title: film, ceremony: row.ceremony, yearStr, yearNum: yearStrToNum(yearStr), wins: new Set(), noms: new Set(), nomCount: 0, winCount: 0 };
       }
-      map[key].noms.add(row.category);
+      map[key].noms.add(cat);
       map[key].nomCount += 1;
-      if (row.winner) { map[key].wins.add(row.category); map[key].winCount += 1; }
+      if (row.winner) { map[key].wins.add(cat); map[key].winCount += 1; }
     });
     return Object.values(map);
   }, [allData]);
@@ -3821,10 +3851,12 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
 
     const map = {};
     allData.forEach(row => {
+      const cat = CATEGORY_NORMALIZE[row.category] || null;
+      if (!cat) return; // skip non-competitive categories
       const creditStrings = row.name ? row.name.split("|") : [];
       const allCredits = creditStrings.length > 0 ? creditStrings : [row.film];
       const yearStr = CEREMONY_YEAR_MAP[row.ceremony] || "";
-      const entry = { category: row.category, film: row.film?.split("|")[0]?.trim(), yearStr, yearNum: yearStrToNum(yearStr), ceremony: row.ceremony };
+      const entry = { category: cat, film: row.film?.split("|")[0]?.trim(), yearStr, yearNum: yearStrToNum(yearStr), ceremony: row.ceremony };
 
       allCredits.forEach(credit => {
         const names = extractNames(credit);
