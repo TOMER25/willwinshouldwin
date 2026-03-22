@@ -4258,14 +4258,32 @@ function HistoryScreen({ user, onGoHome }) {
       supabase.from("historical_picks").select("category, nominee_index").eq("user_id", user.id).eq("ceremony", num),
       supabase.from("historical_picks").select("category, nominee_index").eq("ceremony", num),
     ]);
-    setNominees((nomRes.data || []).map(n => ({ ...n, category: CATEGORY_NORMALIZE[n.category] || n.category })));
+    // Normalize category names and re-index within each category to fix
+    // duplicate nominee_index values caused by merging historical sub-categories
+    // (e.g. Cinematography B&W + Color both normalized to Cinematography)
+    const rawNominees = (nomRes.data || []).map(n => ({
+      ...n,
+      category: CATEGORY_NORMALIZE[n.category] || n.category,
+    }));
+    const catIndexCounters = {};
+    const reindexed = rawNominees.map(n => {
+      const key = n.category;
+      if (catIndexCounters[key] === undefined) catIndexCounters[key] = 0;
+      const newIndex = catIndexCounters[key]++;
+      return { ...n, nominee_index: newIndex };
+    });
+    setNominees(reindexed);
     const pm = {};
-    (pickRes.data || []).forEach(p => { pm[p.category] = p.nominee_index; });
+    (pickRes.data || []).forEach(p => {
+      const cat = CATEGORY_NORMALIZE[p.category] || p.category;
+      pm[cat] = p.nominee_index;
+    });
     setShouldPicks(pm);
     const cm = {};
     (countRes.data || []).forEach(p => {
-      if (!cm[p.category]) cm[p.category] = {};
-      cm[p.category][p.nominee_index] = (cm[p.category][p.nominee_index] || 0) + 1;
+      const cat = CATEGORY_NORMALIZE[p.category] || p.category;
+      if (!cm[cat]) cm[cat] = {};
+      cm[cat][p.nominee_index] = (cm[cat][p.nominee_index] || 0) + 1;
     });
     setPickCounts(cm);
   };
@@ -4292,8 +4310,9 @@ function HistoryScreen({ user, onGoHome }) {
       .from("historical_picks").select("category, nominee_index").eq("ceremony", selected);
     const cm = {};
     (countData || []).forEach(p => {
-      if (!cm[p.category]) cm[p.category] = {};
-      cm[p.category][p.nominee_index] = (cm[p.category][p.nominee_index] || 0) + 1;
+      const cat = CATEGORY_NORMALIZE[p.category] || p.category;
+      if (!cm[cat]) cm[cat] = {};
+      cm[cat][p.nominee_index] = (cm[cat][p.nominee_index] || 0) + 1;
     });
     setPickCounts(cm);
     loadHistStats();
