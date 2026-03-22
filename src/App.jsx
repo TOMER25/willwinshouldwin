@@ -3802,10 +3802,11 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
       const key = `${film}||${row.ceremony}`;
       if (!map[key]) {
         const yearStr = CEREMONY_YEAR_MAP[row.ceremony] || "";
-        map[key] = { title: film, ceremony: row.ceremony, yearStr, yearNum: yearStrToNum(yearStr), wins: new Set(), noms: new Set() };
+        map[key] = { title: film, ceremony: row.ceremony, yearStr, yearNum: yearStrToNum(yearStr), wins: new Set(), noms: new Set(), nomCount: 0, winCount: 0 };
       }
       map[key].noms.add(row.category);
-      if (row.winner) map[key].wins.add(row.category);
+      map[key].nomCount += 1;
+      if (row.winner) { map[key].wins.add(row.category); map[key].winCount += 1; }
     });
     return Object.values(map);
   }, [allData]);
@@ -3842,8 +3843,8 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
     if (!hasFilters) return [];
     return filmIndex.filter(f => {
       if (!yearNumInDecadeRange(f.yearNum, filmDecadeFrom, filmDecadeTo)) return false;
-      if (filmMinNoms > 0 && f.noms.size < filmMinNoms) return false;
-      if (filmSpecial === "NO_WINS" && f.wins.size > 0) return false;
+      if (filmMinNoms > 0 && f.nomCount < filmMinNoms) return false;
+      if (filmSpecial === "NO_WINS" && f.winCount > 0) return false;
       const pool = filmType === "wins" ? f.wins : f.noms;
       if (!filmCats.length) return true;
       if (filmSpecial === "AND_PICTURE_ACTING") {
@@ -3858,8 +3859,8 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
   const sortedFilmResults = useMemo(() => {
     const arr = [...filmResults];
     arr.sort((a, b) => {
-      if (filmSort.col === "wins") return filmSort.dir === "asc" ? a.wins.size - b.wins.size : b.wins.size - a.wins.size;
-      if (filmSort.col === "noms") return filmSort.dir === "asc" ? a.noms.size - b.noms.size : b.noms.size - a.noms.size;
+      if (filmSort.col === "wins") return filmSort.dir === "asc" ? a.winCount - b.winCount : b.winCount - a.winCount;
+      if (filmSort.col === "noms") return filmSort.dir === "asc" ? a.nomCount - b.nomCount : b.nomCount - a.nomCount;
       if (filmSort.col === "year") {
         const av = a.yearNum || 0, bv = b.yearNum || 0;
         return filmSort.dir === "asc" ? av - bv : bv - av;
@@ -4046,8 +4047,8 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
                       <tr key={i} className="explorer-tr" onClick={() => onGoHistory(f.ceremony)}>
                         <td className="explorer-td explorer-td-title">{f.title}</td>
                         <td className="explorer-td">{f.yearStr}</td>
-                        <td className="explorer-td explorer-td-num" style={{ color: "var(--gold)" }}>{f.wins.size}</td>
-                        <td className="explorer-td explorer-td-num">{f.noms.size}</td>
+                        <td className="explorer-td explorer-td-num" style={{ color: "var(--gold)" }}>{f.winCount}</td>
+                        <td className="explorer-td explorer-td-num">{f.nomCount}</td>
                         {filmCats.map(c => (
                           <td key={c} className="explorer-td explorer-td-check">
                             {f.wins.has(c) ? <span className="explorer-check-win">★</span> : f.noms.has(c) ? <span className="explorer-check-nom">◦</span> : <span className="explorer-check-no">–</span>}
