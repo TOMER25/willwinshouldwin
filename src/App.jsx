@@ -3745,6 +3745,7 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
   const [filmSort, setFilmSort] = useState({ col: "wins", dir: "desc" });
   const [filmSpecial, setFilmSpecial] = useState(null);
   const [filmMinNoms, setFilmMinNoms] = useState(0);
+  const [modalFilm, setModalFilm] = useState(null);
 
   // People tab state
   const [personQuery, setPersonQuery] = useState("");
@@ -3815,17 +3816,42 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
   // Build person index — year derived from CEREMONY_YEAR_MAP
   const personIndex = useMemo(() => {
     if (!allData) return [];
+
+    const CREDIT_PREFIXES = [
+      /^written for the screen by\s+/i,
+      /^written by\s+/i,
+      /^screenplay by\s+/i,
+      /^music by\s+/i,
+      /^directed by\s+/i,
+      /^produced by\s+/i,
+    ];
+    const CREDIT_SUFFIX = /,?\s+(producers?|directors?|composers?|cinematographers?|editors?)$/i;
+
+    const extractNames = (creditStr) => {
+      if (!creditStr) return [];
+      let s = creditStr.trim();
+      for (const re of CREDIT_PREFIXES) s = s.replace(re, "");
+      s = s.replace(CREDIT_SUFFIX, "");
+      return s.split(/\s+and\s+|\s+&\s+|,\s+/).map(p => p.trim()).filter(p => p.length > 1);
+    };
+
     const map = {};
     allData.forEach(row => {
-      const names = row.name ? row.name.split("|") : [row.film];
-      names.forEach(rawName => {
-        const name = rawName?.trim();
-        if (!name) return;
-        if (!map[name]) map[name] = { name, wins: [], noms: [] };
-        const yearStr = CEREMONY_YEAR_MAP[row.ceremony] || "";
-        const entry = { category: row.category, film: row.film?.split("|")[0]?.trim(), yearStr, yearNum: yearStrToNum(yearStr), ceremony: row.ceremony };
-        map[name].noms.push(entry);
-        if (row.winner) map[name].wins.push(entry);
+      const creditStrings = row.name ? row.name.split("|") : [];
+      const allCredits = creditStrings.length > 0 ? creditStrings : [row.film];
+      const yearStr = CEREMONY_YEAR_MAP[row.ceremony] || "";
+      const entry = { category: row.category, film: row.film?.split("|")[0]?.trim(), yearStr, yearNum: yearStrToNum(yearStr), ceremony: row.ceremony };
+
+      allCredits.forEach(credit => {
+        const names = extractNames(credit);
+        const toIndex = names.length > 0 ? names : [credit.trim()];
+        toIndex.forEach(name => {
+          if (!name) return;
+          const key = name.toLowerCase();
+          if (!map[key]) map[key] = { name, wins: [], noms: [] };
+          map[key].noms.push(entry);
+          if (row.winner) map[key].wins.push(entry);
+        });
       });
     });
     return Object.values(map);
@@ -4046,7 +4072,7 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
                   </thead>
                   <tbody>
                     {sortedFilmResults.map((f, i) => (
-                      <tr key={i} className="explorer-tr" onClick={() => onGoHistory(f.ceremony)}>
+                      <tr key={i} className="explorer-tr" onClick={() => TMDB_API_KEY && setModalFilm(f.title)} style={{ cursor: TMDB_API_KEY ? "pointer" : "default" }}>
                         <td className="explorer-td explorer-td-title">{f.title}</td>
                         <td className="explorer-td">{f.yearStr}</td>
                         <td className="explorer-td explorer-td-num" style={{ color: "var(--gold)" }}>{f.winCount}</td>
@@ -4161,6 +4187,7 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
           )}
         </div>
       )}
+      {modalFilm && <FilmModal nomineeStr={modalFilm} onClose={() => setModalFilm(null)} />}
     </div>
   );
 }
