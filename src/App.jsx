@@ -3745,7 +3745,6 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
   const [filmSort, setFilmSort] = useState({ col: "wins", dir: "desc" });
   const [filmSpecial, setFilmSpecial] = useState(null);
   const [filmMinNoms, setFilmMinNoms] = useState(0);
-  const [modalFilm, setModalFilm] = useState(null);
 
   // People tab state
   const [personQuery, setPersonQuery] = useState("");
@@ -3755,7 +3754,8 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
   const [personDecadeTo, setPersonDecadeTo] = useState("");
   const [personSort, setPersonSort] = useState({ col: "wins", dir: "desc" });
   const [personMinWins, setPersonMinWins] = useState(0);
-  const [personMode, setPersonMode] = useState("ANY"); // ANY or AND_ANY
+  const [personMode, setPersonMode] = useState("ANY");
+  const [personShowAll, setPersonShowAll] = useState(false);
 
   useEffect(() => {
     const loadAll = async () => {
@@ -3874,7 +3874,7 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
 
   // Person results
   const sortedPersonResults = useMemo(() => {
-    const hasFilters = personQuery.trim() || personCats.length > 0 || personDecadeFrom || personDecadeTo;
+    const hasFilters = personShowAll || personQuery.trim() || personCats.length > 0 || personDecadeFrom || personDecadeTo || personMinWins > 0 || personMode === "AND_ANY";
     if (!hasFilters) return [];
 
     let people = personIndex;
@@ -3939,15 +3939,16 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
     setPersonMode(p.mode === "AND_ANY" ? "AND_ANY" : "ANY");
     setPersonMinWins(p.minWins || 0);
     setPersonSort({ col: p.sortBy === "noms" ? "noms" : "wins", dir: "desc" });
+    setPersonShowAll(true);
   };
 
   const resetFilm = () => { setFilmCats([]); setFilmMode("AND"); setFilmType("wins"); setFilmDecadeFrom(""); setFilmDecadeTo(""); setFilmSpecial(null); setFilmMinNoms(0); };
-  const resetPerson = () => { setPersonQuery(""); setPersonCats([]); setPersonType("wins"); setPersonDecadeFrom(""); setPersonDecadeTo(""); setPersonMinWins(0); setPersonMode("ANY"); };
+  const resetPerson = () => { setPersonQuery(""); setPersonCats([]); setPersonType("wins"); setPersonDecadeFrom(""); setPersonDecadeTo(""); setPersonMinWins(0); setPersonMode("ANY"); setPersonShowAll(false); };
 
   const toggleCat = (cat, list, setter) => setter(list.includes(cat) ? list.filter(c => c !== cat) : [...list, cat]);
 
   const hasFilmFilters = filmCats.length > 0 || filmDecadeFrom || filmDecadeTo || filmMinNoms > 0 || filmSpecial === "NO_WINS";
-  const hasPersonFilters = personQuery.trim() || personCats.length > 0 || personDecadeFrom || personDecadeTo;
+  const hasPersonFilters = personShowAll || personQuery.trim() || personCats.length > 0 || personDecadeFrom || personDecadeTo || personMinWins > 0 || personMode === "AND_ANY";
 
   return (
     <div className="explorer-screen">
@@ -4045,7 +4046,7 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
                   </thead>
                   <tbody>
                     {sortedFilmResults.map((f, i) => (
-                      <tr key={i} className="explorer-tr" onClick={() => TMDB_API_KEY && setModalFilm(f.title)} style={{ cursor: TMDB_API_KEY ? "pointer" : "default" }}>
+                      <tr key={i} className="explorer-tr" onClick={() => onGoHistory(f.ceremony)}>
                         <td className="explorer-td explorer-td-title">{f.title}</td>
                         <td className="explorer-td">{f.yearStr}</td>
                         <td className="explorer-td explorer-td-num" style={{ color: "var(--gold)" }}>{f.winCount}</td>
@@ -4106,7 +4107,7 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
             <div className="explorer-cat-chips">
               {EXPLORER_CATEGORIES.map(cat => (
                 <button key={cat} className={`explorer-cat-chip ${personCats.includes(cat) ? "active" : ""}`}
-                  onClick={() => toggleCat(cat, personCats, setPersonCats)}>
+                  onClick={() => { toggleCat(cat, personCats, setPersonCats); setPersonShowAll(true); }}>
                   {CAT_SHORT[cat] || cat}
                 </button>
               ))}
@@ -4160,7 +4161,6 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
           )}
         </div>
       )}
-      {modalFilm && <FilmModal nomineeStr={modalFilm} onClose={() => setModalFilm(null)} />}
     </div>
   );
 }
