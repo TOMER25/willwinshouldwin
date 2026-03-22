@@ -3770,21 +3770,9 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
     const loadAll = async () => {
       setLoading(true);
       setLoadError(null);
-      const pageSize = 1000;
-      let offset = 0;
-      let all = [];
-      let keepGoing = true;
-      while (keepGoing) {
-        const { data, error } = await supabase
-          .from("historical_ceremonies")
-          .select("ceremony, category, nominee_index, winner, film, name")
-          .range(offset, offset + pageSize - 1);
-        if (error) { setLoadError(error.message); setLoading(false); return; }
-        if (data && data.length > 0) all = all.concat(data);
-        if (!data || data.length < pageSize) keepGoing = false;
-        else offset += pageSize;
-      }
-      setAllData(all);
+      const { data, error } = await supabase.rpc("get_all_historical_ceremonies");
+      if (error) { setLoadError(error.message); setLoading(false); return; }
+      setAllData(data || []);
       setLoading(false);
     };
     loadAll();
@@ -3793,23 +3781,11 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
   // Build film index — keyed by film+ceremony, year derived from CEREMONY_YEAR_MAP
   const filmIndex = useMemo(() => {
     if (!allData) return [];
-
-    // DIAGNOSTIC — log all raw rows for known films to inspect DB structure
-    const diag = allData.filter(r => {
-      const f = (r.film || "").toLowerCase();
-      const n = (r.name || "").toLowerCase();
-      return f.includes("american hustle") || n.includes("american hustle") ||
-             f.includes("color purple") || n.includes("color purple");
-    });
-    console.log("=== DIAGNOSTIC: raw rows for American Hustle / Color Purple ===");
-    console.table(diag.map(r => ({ ceremony: r.ceremony, category: r.category, film: r.film, name: r.name, winner: r.winner })));
-    console.log(`Total matching rows: ${diag.length}`);
-
     const map = {};
     allData.forEach(row => {
       const film = row.film?.split("|")[0]?.trim();
       if (!film) return;
-      const key = `${film}||${row.ceremony}`;
+      const key = `${film.toLowerCase()}||${row.ceremony}`;
       if (!map[key]) {
         const yearStr = CEREMONY_YEAR_MAP[row.ceremony] || "";
         map[key] = { title: film, ceremony: row.ceremony, yearStr, yearNum: yearStrToNum(yearStr), wins: new Set(), noms: new Set(), nomCount: 0, winCount: 0 };
