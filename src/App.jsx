@@ -3780,17 +3780,19 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
     loadAll();
   }, []);
 
-  // Build film index — keyed by film+ceremony, year derived from CEREMONY_YEAR_MAP
+  // Build film index — one entry per film per ceremony.
+  // Some rows may have the film title in `name` when `film` is empty (older ceremony data).
+  // Normalize key to lowercase+trim to handle casing inconsistencies.
   const filmIndex = useMemo(() => {
     if (!allData) return [];
     const map = {};
     allData.forEach(row => {
-      const film = row.film?.split("|")[0]?.trim();
-      if (!film) return;
-      const key = `${film}||${row.ceremony}`;
+      const rawFilm = (row.film || row.name || "").split("|")[0].trim();
+      if (!rawFilm) return;
+      const key = `${rawFilm.toLowerCase()}||${row.ceremony}`;
       if (!map[key]) {
         const yearStr = CEREMONY_YEAR_MAP[row.ceremony] || "";
-        map[key] = { title: film, ceremony: row.ceremony, yearStr, yearNum: yearStrToNum(yearStr), wins: new Set(), noms: new Set() };
+        map[key] = { title: rawFilm, ceremony: row.ceremony, yearStr, yearNum: yearStrToNum(yearStr), wins: new Set(), noms: new Set() };
       }
       map[key].noms.add(row.category);
       if (row.winner) map[key].wins.add(row.category);
