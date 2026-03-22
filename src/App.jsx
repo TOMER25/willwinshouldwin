@@ -3745,6 +3745,7 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
   const [filmSort, setFilmSort] = useState({ col: "wins", dir: "desc" });
   const [filmSpecial, setFilmSpecial] = useState(null);
   const [filmMinNoms, setFilmMinNoms] = useState(0);
+  const [modalFilm, setModalFilm] = useState(null);
 
   // People tab state
   const [personQuery, setPersonQuery] = useState("");
@@ -4044,7 +4045,7 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
                   </thead>
                   <tbody>
                     {sortedFilmResults.map((f, i) => (
-                      <tr key={i} className="explorer-tr" onClick={() => onGoHistory(f.ceremony)}>
+                      <tr key={i} className="explorer-tr" onClick={() => TMDB_API_KEY && setModalFilm(f.title)} style={{ cursor: TMDB_API_KEY ? "pointer" : "default" }}>
                         <td className="explorer-td explorer-td-title">{f.title}</td>
                         <td className="explorer-td">{f.yearStr}</td>
                         <td className="explorer-td explorer-td-num" style={{ color: "var(--gold)" }}>{f.winCount}</td>
@@ -4159,6 +4160,7 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
           )}
         </div>
       )}
+      {modalFilm && <FilmModal nomineeStr={modalFilm} onClose={() => setModalFilm(null)} />}
     </div>
   );
 }
