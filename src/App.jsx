@@ -3718,7 +3718,7 @@ const FILM_PRESETS = [
   { label: "Won Picture + Editing", cats: ["Best Picture","Film Editing"], mode: "AND", type: "wins" },
   { label: "Won Picture + Director", cats: ["Best Picture","Directing"], mode: "AND", type: "wins" },
   { label: "Won Picture + Cinematography", cats: ["Best Picture","Cinematography"], mode: "AND", type: "wins" },
-  { label: "Most nominated, no wins", cats: [], mode: "AND", type: "nominations", sortBy: "noms", minNoms: 5, special: "NO_WINS" },
+  { label: "Most nominated, no wins", cats: [], mode: "AND", type: "nominations", sortBy: "noms", minNoms: 3, special: "NO_WINS" },
   { label: "Won acting + picture", cats: ["Best Picture",...ACTING_CATS], mode: "AND_PICTURE_ACTING", type: "wins" },
 ];
 
@@ -3760,9 +3760,21 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
     const loadAll = async () => {
       setLoading(true);
       setLoadError(null);
-      const { data, error } = await supabase.rpc("get_all_historical_ceremonies");
-      if (error) { setLoadError(error.message); setLoading(false); return; }
-      setAllData(data || []);
+      const pageSize = 1000;
+      let offset = 0;
+      let all = [];
+      let keepGoing = true;
+      while (keepGoing) {
+        const { data, error } = await supabase
+          .from("historical_ceremonies")
+          .select("ceremony, category, nominee_index, winner, film, name")
+          .range(offset, offset + pageSize - 1);
+        if (error) { setLoadError(error.message); setLoading(false); return; }
+        if (data && data.length > 0) all = all.concat(data);
+        if (!data || data.length < pageSize) keepGoing = false;
+        else offset += pageSize;
+      }
+      setAllData(all);
       setLoading(false);
     };
     loadAll();
