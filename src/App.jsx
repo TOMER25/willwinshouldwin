@@ -3809,13 +3809,12 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
   // Build film index — keyed by film+ceremony, year derived from CEREMONY_YEAR_MAP
   const filmIndex = useMemo(() => {
     if (!allData) return [];
-    const unmapped = new Set();
     const map = {};
     allData.forEach(row => {
       const film = row.film?.split("|")[0]?.trim();
       if (!film) return;
       const cat = CATEGORY_NORMALIZE[row.category] || null;
-      if (!cat) { unmapped.add(row.category); return; }
+      if (!cat) return;
       const key = `${film.toLowerCase()}||${row.ceremony}`;
       if (!map[key]) {
         const yearStr = CEREMONY_YEAR_MAP[row.ceremony] || "";
@@ -3825,11 +3824,6 @@ function OscarExplorerScreen({ onGoHome, onGoHistory }) {
       map[key].nomCount += 1;
       if (row.winner) { map[key].wins.add(cat); map[key].winCount += 1; }
     });
-    console.log(`[Explorer] allData rows: ${allData.length}, film entries: ${Object.keys(map).length}`);
-    console.log(`[Explorer] unmapped categories:`, [...unmapped].sort());
-    // Sample a few ceremonies to check spread
-    const ceremonies = [...new Set(allData.map(r => r.ceremony))].sort((a,b) => a-b);
-    console.log(`[Explorer] ceremony range: ${ceremonies[0]} to ${ceremonies[ceremonies.length-1]}, total: ${ceremonies.length}`);
     return Object.values(map);
   }, [allData]);
 
