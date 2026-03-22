@@ -3504,7 +3504,10 @@ function HistoricalPicksSection({ userId }) {
       .select("ceremony, category, nominee_index, name, film, winner")
       .in("ceremony", ceremonies);
     const nm = {};
-    (nomData || []).forEach(n => { nm[`${n.ceremony}-${n.category}-${n.nominee_index}`] = n; });
+    (nomData || []).forEach(n => {
+      const cat = CATEGORY_NORMALIZE[n.category] || n.category;
+      nm[`${n.ceremony}-${cat}-${n.nominee_index}`] = { ...n, category: cat };
+    });
     setNominees(nm);
     setLoading(false);
   };
@@ -4238,7 +4241,10 @@ function HistoryScreen({ user, onGoHome }) {
     const { data: nomData } = await supabase
       .from("historical_ceremonies").select("ceremony, category, nominee_index, winner").in("ceremony", ceremonies);
     const nomMap = {};
-    (nomData || []).forEach(n => { nomMap[`${n.ceremony}-${n.category}-${n.nominee_index}`] = n.winner; });
+    (nomData || []).forEach(n => {
+      const cat = CATEGORY_NORMALIZE[n.category] || n.category;
+      nomMap[`${n.ceremony}-${cat}-${n.nominee_index}`] = n.winner;
+    });
     const matched = data.filter(p => nomMap[`${p.ceremony}-${p.category}-${p.nominee_index}`]).length;
     setHistStats({ total: data.length, matched, ceremonies: ceremonies.length });
     setPickedCeremonies(new Set(ceremonies));
@@ -4252,7 +4258,7 @@ function HistoryScreen({ user, onGoHome }) {
       supabase.from("historical_picks").select("category, nominee_index").eq("user_id", user.id).eq("ceremony", num),
       supabase.from("historical_picks").select("category, nominee_index").eq("ceremony", num),
     ]);
-    setNominees(nomRes.data || []);
+    setNominees((nomRes.data || []).map(n => ({ ...n, category: CATEGORY_NORMALIZE[n.category] || n.category })));
     const pm = {};
     (pickRes.data || []).forEach(p => { pm[p.category] = p.nominee_index; });
     setShouldPicks(pm);
@@ -4369,8 +4375,9 @@ function HistoryScreen({ user, onGoHome }) {
 
   const byCategory = {};
   for (const row of nominees) {
-    if (!byCategory[row.category]) byCategory[row.category] = [];
-    byCategory[row.category].push(row);
+    const cat = CATEGORY_NORMALIZE[row.category] || row.category;
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push({ ...row, category: cat });
   }
 
   const selectedEntry = CEREMONY_LIST.find(c => c.ceremony === selected);
