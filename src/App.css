@@ -1866,6 +1866,9 @@ body {
 .pvp-label { font-weight: 600; color: inherit; }
 .pvp-desc { color: var(--text-muted); font-size: 0.7rem; flex: 1; }
 .pvp-edit { color: var(--gold); font-size: 0.7rem; flex-shrink: 0; white-space: nowrap; }
+
+/* ============================================================
+   PROFILE TABS
    ============================================================ */
 .profile-tabs { display: flex; border-bottom: 1px solid var(--border); gap: 0; }
 .profile-tab { flex: 1; font-family: 'DM Mono', monospace; font-size: 0.75rem; padding: 0.65rem 1rem; background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 0.4rem; }
